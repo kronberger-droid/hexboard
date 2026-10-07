@@ -7,8 +7,9 @@ a phase is finished when its done-when holds on the device, then mark it here.
 | --- | --- |
 | 0 Toolchain | done |
 | 1 Skeleton IME | done |
-| 2 Hex grid | builds, tests pass; on-device check and layout review pending |
-| 3 to 8 | open |
+| 2 Hex grid | done |
+| 3 Swipes and shift | builds, tests pass; on-device check pending |
+| 4 to 8 | open |
 
 ## Phase 0: Toolchain on NixOS
 

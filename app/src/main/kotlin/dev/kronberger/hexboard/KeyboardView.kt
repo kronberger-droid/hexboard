@@ -5,26 +5,33 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.os.Build
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
+import dev.kronberger.hexboard.core.Direction
 import dev.kronberger.hexboard.core.Face
 import dev.kronberger.hexboard.core.HexGrid
 import dev.kronberger.hexboard.core.Key
 import dev.kronberger.hexboard.core.KeyAction
-import dev.kronberger.hexboard.core.Layout
+import dev.kronberger.hexboard.core.Keyboard
+import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
+import dev.kronberger.hexboard.core.ShiftState
+import dev.kronberger.hexboard.core.classify
 import dev.kronberger.hexboard.core.keyboardHeightPx
 
-/** Draws [layout] as a honeycomb and reports tapped faces to [onFace]. */
+/** Draws [keyboard]'s layout as a honeycomb and reports resolved actions to [onAction]. */
 class KeyboardView(
     context: Context,
-    private val layout: Layout,
-    private val onFace: (Face) -> Unit,
+    private val keyboard: Keyboard,
+    private val onAction: (KeyAction) -> Unit,
 ) : View(context) {
 
+    private val layout = keyboard.layout
     private val density = resources.displayMetrics.density
     private val padding = 4f * density
+    private val swipeThreshold = SWIPE_THRESHOLD_DP * density
 
     private val keyFill = paint(0x2e2e2e)
     private val lowerFill = paint(0x262626)
@@ -34,6 +41,15 @@ class KeyboardView(
         color = Color.WHITE
         textAlign = Paint.Align.CENTER
     }
+    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(0x9a, 0x9a, 0x9a)
+        textAlign = Paint.Align.CENTER
+    }
+    private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
 
     /** System bars the keyboard must stay clear of, e.g. the IME switcher row. */
     private var insetLeft = 0
@@ -42,6 +58,11 @@ class KeyboardView(
 
     private var grid: HexGrid? = null
     private var paths: Map<Key, Path> = emptyMap()
+
+    /** The touch in progress: where it went down and what it went down on. */
+    private var downX = 0f
+    private var downY = 0f
+    private var downKey: Key? = null
     private var downFace: Face? = null
 
     init {
@@ -51,6 +72,16 @@ class KeyboardView(
     private companion object {
         /** Height of the system's IME button strip (AOSP navigation_bar_frame_height). */
         const val IME_NAV_BAR_DP = 48f
+
+        /** Unit vectors in screen coordinates for placing swipe hints. */
+        val HINT_OFFSETS = mapOf(
+            Direction.UP to (0f to -1f),
+            Direction.UP_RIGHT to (0.866f to -0.5f),
+            Direction.DOWN_RIGHT to (0.866f to 0.5f),
+            Direction.DOWN to (0f to 1f),
+            Direction.DOWN_LEFT to (-0.866f to 0.5f),
+            Direction.UP_LEFT to (-0.866f to -0.5f),
+        )
     }
 
     private fun paint(rgb: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(rgb shr 16, (rgb shr 8) and 0xff, rgb and 0xff) }
@@ -102,6 +133,8 @@ class KeyboardView(
             }
         }
         labelPaint.textSize = g.radius * 0.6f
+        hintPaint.textSize = g.radius * 0.3f
+        iconPaint.strokeWidth = g.radius * 0.06f
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -120,10 +153,14 @@ class KeyboardView(
             // Bare keys sit on hexes half off-screen; pull their labels in.
             val x = c.x.coerceIn(insetLeft + labelPaint.textSize, width - insetRight - labelPaint.textSize)
             if (key.lower == null) {
-                drawLabel(canvas, key.face, x, c.y)
+                drawFace(canvas, key.face, x, c.y)
             } else {
-                drawLabel(canvas, key.face, x, c.y - g.radius * 0.45f)
-                drawLabel(canvas, key.lower, x, c.y + g.radius * 0.45f)
+                drawFace(canvas, key.face, x, c.y - g.radius * 0.45f)
+                drawFace(canvas, key.lower, x, c.y + g.radius * 0.45f)
+            }
+            for ((direction, text) in key.alternates) {
+                val (ox, oy) = HINT_OFFSETS.getValue(direction)
+                drawCentered(canvas, text, c.x + ox * g.radius * 0.62f, c.y + oy * g.radius * 0.62f, hintPaint)
             }
         }
     }
@@ -134,24 +171,63 @@ class KeyboardView(
         else -> keyFill
     }
 
-    private fun drawLabel(canvas: Canvas, face: Face, x: Float, y: Float) {
-        if (face.action == KeyAction.Space) return
-        val baseline = y - (labelPaint.ascent() + labelPaint.descent()) / 2f
-        canvas.drawText(face.label, x, baseline, labelPaint)
+    private fun drawFace(canvas: Canvas, face: Face, x: Float, y: Float) {
+        when (face.action) {
+            KeyAction.Space -> Unit
+            KeyAction.Emoji -> drawSmiley(canvas, x, y, labelPaint.textSize * 0.42f)
+            // Dim when off, bright for one capital, caps-lock glyph when locked.
+            KeyAction.Shift -> {
+                labelPaint.alpha = if (keyboard.shift == ShiftState.OFF) 0x80 else 0xff
+                drawCentered(canvas, if (keyboard.shift == ShiftState.LOCKED) "⇪" else "⇧", x, y, labelPaint)
+                labelPaint.alpha = 0xff
+            }
+            else -> drawCentered(canvas, keyboard.label(face), x, y, labelPaint)
+        }
+    }
+
+    /** Line art in the label color; the emoji font would draw it in yellow. */
+    private fun drawSmiley(canvas: Canvas, x: Float, y: Float, r: Float) {
+        canvas.drawCircle(x, y, r, iconPaint)
+        val eye = iconPaint.strokeWidth * 0.9f
+        iconPaint.style = Paint.Style.FILL
+        canvas.drawCircle(x - r * 0.35f, y - r * 0.25f, eye, iconPaint)
+        canvas.drawCircle(x + r * 0.35f, y - r * 0.25f, eye, iconPaint)
+        iconPaint.style = Paint.Style.STROKE
+        canvas.drawArc(RectF(x - r * 0.5f, y - r * 0.45f, x + r * 0.5f, y + r * 0.5f), 25f, 130f, false, iconPaint)
+    }
+
+    private fun drawCentered(canvas: Canvas, text: String, x: Float, y: Float, paint: Paint) {
+        val baseline = y - (paint.ascent() + paint.descent()) / 2f
+        canvas.drawText(text, x, baseline, paint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val g = grid ?: return false
         when (event.actionMasked) {
-            // The face under the finger at touch down is the one that types,
-            // so drifting while lifting does not change it.
-            MotionEvent.ACTION_DOWN -> downFace = layout.faceAt(g, event.x, event.y)
+            // The key under the finger at touch down is the one that acts;
+            // the release point only decides tap or swipe direction.
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                downKey = layout.keyAt(g, event.x, event.y)
+                downFace = layout.faceAt(g, event.x, event.y)
+            }
             MotionEvent.ACTION_UP -> {
-                downFace?.let(onFace)
+                val key = downKey
+                val face = downFace
+                if (key != null && face != null) {
+                    val gesture = classify(event.x - downX, event.y - downY, swipeThreshold)
+                    keyboard.resolve(key, face, gesture)?.let(onAction)
+                    invalidate()
+                }
+                downKey = null
                 downFace = null
                 performClick()
             }
-            MotionEvent.ACTION_CANCEL -> downFace = null
+            MotionEvent.ACTION_CANCEL -> {
+                downKey = null
+                downFace = null
+            }
         }
         return true
     }

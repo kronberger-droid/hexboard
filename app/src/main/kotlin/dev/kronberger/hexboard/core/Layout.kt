@@ -17,12 +17,14 @@ data class Face(val label: String, val action: KeyAction)
  * A key on one hex. A split key has a [lower] face covering the bottom half
  * of the hex. A [bare] key is drawn as its label only and may hang off the
  * keyboard's edge, so it is left out when fitting the grid to the screen.
+ * [alternates] is the text a swipe in each direction types instead.
  */
 data class Key(
     val pos: Axial,
     val face: Face,
     val lower: Face? = null,
     val bare: Boolean = false,
+    val alternates: Map<Direction, String> = emptyMap(),
 ) {
     /** The face hit by a touch [dy] pixels below the hex's center. */
     fun faceAt(dy: Float): Face = if (lower != null && dy > 0) lower else face
@@ -42,9 +44,12 @@ class Layout(val keys: List<Key>) {
 
     operator fun get(pos: Axial): Key? = byPos[pos]
 
+    /** The key under ([x], [y]), snapping to the nearest one. */
+    fun keyAt(grid: HexGrid, x: Float, y: Float): Key? = grid.nearest(cells, x, y)?.let(::get)
+
     /** The face under ([x], [y]), snapping to the nearest key. */
     fun faceAt(grid: HexGrid, x: Float, y: Float): Face? {
-        val key = grid.nearest(cells, x, y)?.let(::get) ?: return null
+        val key = keyAt(grid, x, y) ?: return null
         return key.faceAt(y - grid.center(key.pos).y)
     }
 
@@ -56,9 +61,14 @@ class Layout(val keys: List<Key>) {
          * half a hex to the right. `·` leaves a cell empty, `top/bottom`
          * splits a key into two halves, and the tokens in [bare] become
          * label-only edge keys. `␣ ⌫ ⏎ ⇧ 123 😊` are the function keys; any
-         * other token types itself.
+         * other token types itself. [alternates] gives swipe outputs per
+         * token.
          */
-        fun parse(rows: List<String>, bare: Set<String> = emptySet()): Layout = Layout(
+        fun parse(
+            rows: List<String>,
+            bare: Set<String> = emptySet(),
+            alternates: Map<String, Map<Direction, String>> = emptyMap(),
+        ): Layout = Layout(
             rows.flatMapIndexed { row, line ->
                 line.trim().split(Regex("\\s+")).mapIndexedNotNull { col, token ->
                     if (token == EMPTY) return@mapIndexedNotNull null
@@ -68,6 +78,7 @@ class Layout(val keys: List<Key>) {
                         face = faceFor(halves[0]),
                         lower = halves.getOrNull(1)?.let(::faceFor),
                         bare = token in bare,
+                        alternates = alternates[token].orEmpty(),
                     )
                 }
             },
@@ -104,5 +115,21 @@ object Layouts {
             "· x c v b 😊/123 ⏎",
         ),
         bare = setOf("⇧", "⌫"),
+        // Diagonals only: on split keys the top and bottom labels already
+        // occupy the up and down positions.
+        alternates = mapOf(
+            ",/." to mapOf(
+                Direction.UP_LEFT to "\"",
+                Direction.UP_RIGHT to "'",
+                Direction.DOWN_LEFT to ";",
+                Direction.DOWN_RIGHT to ":",
+            ),
+            "!/?" to mapOf(
+                Direction.UP_LEFT to "(",
+                Direction.UP_RIGHT to ")",
+                Direction.DOWN_LEFT to "-",
+                Direction.DOWN_RIGHT to "@",
+            ),
+        ),
     )
 }
