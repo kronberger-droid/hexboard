@@ -6,12 +6,12 @@ import org.junit.Test
 class MetricsTest {
 
     @Test
-    fun portraitUsesPreferredHeight() {
-        assertEquals(780, keyboardHeightPx(screenHeightPx = 2400, density = 3f))
+    fun portraitUsesRowPitch() {
+        assertEquals(560, keyboardHeightPx(rows = 3, screenHeightPx = 2400, density = 3f))
     }
 
     @Test
     fun landscapeIsCappedByScreenFraction() {
-        assertEquals(486, keyboardHeightPx(screenHeightPx = 1080, density = 3f))
+        assertEquals(486, keyboardHeightPx(rows = 3, screenHeightPx = 1080, density = 3f))
     }
 }
