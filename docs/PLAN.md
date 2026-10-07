@@ -55,13 +55,15 @@ a phase is finished when its done-when holds on the device, then mark it here.
 ## Phase 5: Backspace
 
 - Tap deletes one grapheme cluster. Test with ZWJ emoji (👨‍👩‍👧) and flags.
-- Scrub: dragging left selects by graphemes with a `setSelection` preview,
-  dragging right shrinks the selection, release deletes. Optionally word
-  steps past some distance.
-- Recall buffer: a right swipe re-inserts the last deletion. The buffer is
-  invalidated in `onUpdateSelection` when the cursor moves elsewhere.
+- Scrub, from any key without swipe alternates (as in Typewise): dragging
+  left selects by graphemes with a `setSelection` preview, dragging right
+  shrinks the selection, release deletes. Keys with alternates keep their
+  six directions instead. Optionally word steps past some distance.
+- Recall buffer: a right swipe on the same keys re-inserts the last
+  deletion. The buffer is invalidated in `onUpdateSelection` when the
+  cursor moves elsewhere.
 - `core/Touches` finishes every finger already down when a new one lands
-  (Phase 4). A scrub is a long drag, so it must be exempt from that.
+  (Phase 4). A scrub is a long drag, so it is exempt from that.
 - **Done when:** scrub and recall work in a normal app. Then try a browser
   and Termux; add a live-deletion fallback only if needed.
 

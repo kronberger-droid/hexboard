@@ -2,6 +2,7 @@ package dev.kronberger.hexboard.core
 
 import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.hypot
 
 /** What a finger produced: a key press to resolve, or an action to perform as is. */
 sealed interface TouchEvent {
@@ -9,7 +10,7 @@ sealed interface TouchEvent {
     data class Act(val action: KeyAction) : TouchEvent
 }
 
-/** Horizontal drag per grapheme cluster while scrubbing on backspace. */
+/** Horizontal drag per grapheme cluster while scrubbing. */
 const val SCRUB_STEP_DP = 12f
 
 /**
@@ -21,17 +22,35 @@ const val SCRUB_STEP_DP = 12f
  * from where it is now. In rolling typing the earlier key can otherwise
  * be released after the later one and come out second.
  *
- * Backspace is the exception once it scrubs. Dragging it left past the
- * swipe threshold selects one cluster per [scrubStepPx], and fingers that
- * land meanwhile are ignored; release deletes the selection. A
- * swipe right on backspace recalls the last deletion instead.
+ * Keys with swipe alternates read six directions (see [classify]). Every
+ * other key reads four: up and down as usual, left to scrub, right to
+ * recall the last deletion. Which of the four is fixed when the finger
+ * first passes the threshold, so an up swipe that drifts left stays up.
+ *
+ * A scrub selects one grapheme cluster per [scrubStepPx] dragged left of
+ * where the finger went down, shrinks again as it comes back, and deletes
+ * the selection on release. It is never finished early by another finger,
+ * and fingers landing while it runs are ignored.
  */
 class Touches(private val thresholdPx: Float, private val scrubStepPx: Float) {
 
+    private enum class Way { UP, DOWN, LEFT, RIGHT }
+
     private class Touch(val id: Int, val key: Key, val x: Float, val y: Float) {
-        val isDelete get() = key.face.action == KeyAction.Delete
-        var scrubbing = false
+        val fourWay get() = key.alternates.isEmpty()
+
+        /** Set once the finger passes the threshold; it does not change after. */
+        var way: Way? = null
+        val scrubbing get() = way == Way.LEFT
         var steps = 0
+    }
+
+    /** The four-way direction of a displacement, or null below the threshold. */
+    private fun way(dx: Float, dy: Float): Way? = when {
+        hypot(dx, dy) < thresholdPx -> null
+        abs(dx) > abs(dy) -> if (dx < 0) Way.LEFT else Way.RIGHT
+        dy < 0 -> Way.UP
+        else -> Way.DOWN
     }
 
     /** Fingers still down, oldest first. */
@@ -54,12 +73,12 @@ class Touches(private val thresholdPx: Float, private val scrubStepPx: Float) {
         return events
     }
 
-    /** Finger [id] moved to ([x], [y]). Only a scrubbing backspace reacts. */
+    /** Finger [id] moved to ([x], [y]). Only scrubs react before release. */
     fun move(id: Int, x: Float, y: Float): List<TouchEvent> {
-        val t = active.find { it.id == id && it.isDelete } ?: return emptyList()
+        val t = active.find { it.id == id && it.fourWay } ?: return emptyList()
         val dx = x - t.x
-        if (!t.scrubbing && dx > -thresholdPx) return emptyList()
-        t.scrubbing = true
+        if (t.way == null) t.way = way(dx, y - t.y)
+        if (!t.scrubbing) return emptyList()
         val steps = floor(-dx / scrubStepPx).toInt().coerceAtLeast(0)
         if (steps == t.steps) return emptyList()
         t.steps = steps
@@ -81,13 +100,15 @@ class Touches(private val thresholdPx: Float, private val scrubStepPx: Float) {
     }
 
     private fun finished(t: Touch, x: Float, y: Float): TouchEvent {
+        if (t.scrubbing) return TouchEvent.Act(KeyAction.ScrubEnd(t.steps))
         val dx = x - t.x
         val dy = y - t.y
-        return when {
-            t.scrubbing -> TouchEvent.Act(KeyAction.ScrubEnd(t.steps))
-            t.isDelete && dx >= thresholdPx && abs(dx) > abs(dy) -> TouchEvent.Act(KeyAction.Recall)
-            t.isDelete -> TouchEvent.Press(t.key, Gesture.Tap)
-            else -> TouchEvent.Press(t.key, classify(dx, dy, thresholdPx))
+        if (!t.fourWay) return TouchEvent.Press(t.key, classify(dx, dy, thresholdPx))
+        return when (t.way ?: way(dx, dy)) {
+            null, Way.LEFT -> TouchEvent.Press(t.key, Gesture.Tap)
+            Way.RIGHT -> TouchEvent.Act(KeyAction.Recall)
+            Way.UP -> TouchEvent.Press(t.key, Gesture.Swipe(Direction.UP))
+            Way.DOWN -> TouchEvent.Press(t.key, Gesture.Swipe(Direction.DOWN))
         }
     }
 }

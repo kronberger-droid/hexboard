@@ -5,11 +5,15 @@ import org.junit.Test
 
 class TouchesTest {
 
-    private val keys = Layout.parse(listOf("a b c ⌫")).keys
+    private val keys = Layout.parse(
+        listOf("a b c ⌫ ,/."),
+        alternates = mapOf(",/." to mapOf(Direction.UP_LEFT to "\"")),
+    ).keys
     private val a = keys[0]
     private val b = keys[1]
     private val c = keys[2]
     private val del = keys[3]
+    private val punct = keys[4]
     private val tap = Gesture.Tap
     private val none = emptyList<TouchEvent>()
 
@@ -114,6 +118,41 @@ class TouchesTest {
         val t = touches()
         t.down(0, del, 500f, 0f, emptyMap())
         assertEquals(listOf(act(KeyAction.Recall)), t.up(0, 560f, 10f))
+    }
+
+    @Test
+    fun anyPlainKeyScrubsLeftAndRecallsRight() {
+        val t = touches()
+        t.down(0, a, 500f, 0f, emptyMap())
+        assertEquals(listOf(act(KeyAction.ScrubTo(3))), t.move(0, 440f, 5f))
+        assertEquals(listOf(act(KeyAction.ScrubEnd(3))), t.up(0, 440f, 5f))
+        t.down(1, a, 500f, 0f, emptyMap())
+        assertEquals(listOf(act(KeyAction.Recall)), t.up(1, 560f, 0f))
+    }
+
+    @Test
+    fun upSwipeThatDriftsLeftStaysUp() {
+        val t = touches()
+        t.down(0, a, 500f, 0f, emptyMap())
+        assertEquals(none, t.move(0, 500f, -60f))
+        assertEquals(none, t.move(0, 380f, -60f))
+        assertEquals(listOf(press(a, Gesture.Swipe(Direction.UP))), t.up(0, 380f, -60f))
+    }
+
+    @Test
+    fun plainKeysReadSteepDiagonalsAsUpOrDown() {
+        val t = touches()
+        t.down(0, a, 0f, 0f, emptyMap())
+        // 40° right of straight up.
+        assertEquals(listOf(press(a, Gesture.Swipe(Direction.UP))), t.up(0, 64f, -77f))
+    }
+
+    @Test
+    fun keysWithAlternatesKeepSixDirectionsAndNeverScrub() {
+        val t = touches()
+        t.down(0, punct, 500f, 0f, emptyMap())
+        assertEquals(none, t.move(0, 440f, -20f))
+        assertEquals(listOf(press(punct, Gesture.Swipe(Direction.UP_LEFT))), t.up(0, 440f, -20f))
     }
 
     @Test
