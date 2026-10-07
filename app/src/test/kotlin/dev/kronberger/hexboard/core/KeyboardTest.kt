@@ -2,6 +2,7 @@ package dev.kronberger.hexboard.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KeyboardTest {
@@ -93,7 +94,37 @@ class KeyboardTest {
         val key = Layout.parse(listOf("😊/123")).keys.single()
         val kb = Keyboard(layout)
         assertEquals(KeyAction.Emoji, kb.press(key, swipe(Direction.UP)))
-        assertEquals(KeyAction.Symbols, kb.press(key, swipe(Direction.DOWN)))
+        assertNull(kb.press(key, swipe(Direction.DOWN)))
+        assertTrue(kb.showingSymbols)
+    }
+
+    @Test
+    fun functionKeySwitchesLayersBothWays() {
+        val letters = Layout.parse(listOf("a 😊/123"))
+        val symbols = Layout.parse(listOf("1 😊/abc"))
+        val kb = Keyboard(letters, symbols)
+        assertNull(kb.press(letters.keys[1]))
+        assertEquals(symbols, kb.layout)
+        assertEquals(text("1"), kb.press(symbols.keys[0]))
+        assertNull(kb.press(symbols.keys[1]))
+        assertEquals(letters, kb.layout)
+    }
+
+    @Test
+    fun swipeUpOnTheFunctionKeyIsStillEmoji() {
+        val letters = Layout.parse(listOf("😊/123"))
+        val kb = Keyboard(letters, Layout.parse(listOf("x")))
+        assertEquals(KeyAction.Emoji, kb.press(letters.keys[0], swipe(Direction.UP)))
+        assertEquals(letters, kb.layout)
+    }
+
+    @Test
+    fun enterShowsTheEditorsActionWhenSet() {
+        val enter = Layout.parse(listOf("⏎")).keys.single().face
+        val kb = Keyboard(layout)
+        assertEquals("⏎", kb.label(enter))
+        kb.enterLabel = "Send"
+        assertEquals("Send", kb.label(enter))
     }
 
     @Test

@@ -18,6 +18,7 @@ import dev.kronberger.hexboard.core.HexGrid
 import dev.kronberger.hexboard.core.Key
 import dev.kronberger.hexboard.core.KeyAction
 import dev.kronberger.hexboard.core.Keyboard
+import dev.kronberger.hexboard.core.Layout
 import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
 import dev.kronberger.hexboard.core.ShiftState
 import dev.kronberger.hexboard.core.Point
@@ -36,7 +37,8 @@ class KeyboardView(
     private val onAction: (KeyAction) -> Unit,
 ) : View(context) {
 
-    private val layout = keyboard.layout
+    private val layout get() = keyboard.layout
+    private var builtFor: Layout? = null
     private val density = resources.displayMetrics.density
     private val padding = 4f * density
     private val swipeThreshold = SWIPE_THRESHOLD_DP * density
@@ -144,7 +146,15 @@ class KeyboardView(
         setMeasuredDimension(width, keysHeight + (2 * padding).toInt() + insetBottom)
     }
 
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) = build(w, h)
+
+    /** The current layer's geometry; rebuilt when the size or the layer changes. */
+    private fun ensureBuilt() {
+        if (builtFor !== layout && width > 0) build(width, height)
+    }
+
+    private fun build(w: Int, h: Int) {
+        builtFor = layout
         val g = HexGrid.fit(
             layout.fitCells,
             left = insetLeft + padding,
@@ -186,6 +196,7 @@ class KeyboardView(
     }
 
     override fun onDraw(canvas: Canvas) {
+        ensureBuilt()
         val g = grid ?: return
         for (key in layout.keys) {
             val c = g.center(key.pos)
@@ -253,6 +264,7 @@ class KeyboardView(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        ensureBuilt()
         val g = grid ?: return false
         val i = event.actionIndex
         val id = event.getPointerId(i)

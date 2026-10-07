@@ -2,11 +2,21 @@ package dev.kronberger.hexboard.core
 
 enum class ShiftState { OFF, ONCE, LOCKED }
 
-/** Turns gestures on keys into actions, keeping the shift state in between. */
-class Keyboard(val layout: Layout) {
+/**
+ * Turns gestures on keys into actions, keeping the keyboard's state in
+ * between: shift, and whether [letters] or [symbols] is showing.
+ */
+class Keyboard(private val letters: Layout, private val symbols: Layout = letters) {
 
     var shift = ShiftState.OFF
         private set
+
+    var showingSymbols = false
+
+    val layout: Layout get() = if (showingSymbols) symbols else letters
+
+    /** What the enter key says, set from the editor; null keeps its own label. */
+    var enterLabel: String? = null
 
     /**
      * The action for [gesture] starting on [key], or null when the gesture
@@ -14,20 +24,28 @@ class Keyboard(val layout: Layout) {
      *
      * A swipe uses the key's alternate for its direction if there is one.
      * Otherwise, on a split key, up picks the upper face and everything else
-     * the lower one, which is the default. On a plain key, up forces a capital and down
-     * forces lowercase. Any other direction falls back to a tap, so a tap
-     * that slid does not get lost.
+     * the lower one, which is the default. On a plain key, up forces a
+     * capital and down forces lowercase. Any other direction falls back to a
+     * tap, so a tap that slid does not get lost.
      */
-    fun resolve(key: Key, gesture: Gesture): KeyAction? {
-        val face = key.face
-        if (face.action == KeyAction.Shift) {
+    fun resolve(key: Key, gesture: Gesture): KeyAction? = when (val action = action(key, gesture)) {
+        KeyAction.Shift -> {
             shift = when (shift) {
                 ShiftState.OFF -> ShiftState.ONCE
                 ShiftState.ONCE -> ShiftState.LOCKED
                 ShiftState.LOCKED -> ShiftState.OFF
             }
-            return null
+            null
         }
+        KeyAction.Symbols, KeyAction.Letters -> {
+            showingSymbols = action == KeyAction.Symbols
+            null
+        }
+        else -> action
+    }
+
+    private fun action(key: Key, gesture: Gesture): KeyAction {
+        val face = key.face
         val direction = (gesture as? Gesture.Swipe)?.direction
         direction?.let { key.alternates[it] }?.let { return typed(KeyAction.Text(it)) }
 
@@ -45,9 +63,12 @@ class Keyboard(val layout: Layout) {
         return typed(KeyAction.Text(if (upper) action.text.uppercase() else action.text))
     }
 
-    /** What [face] shows in the current shift state. */
-    fun label(face: Face): String =
-        if (face.action is KeyAction.Text && shift != ShiftState.OFF) face.label.uppercase() else face.label
+    /** What [face] shows in the current state. */
+    fun label(face: Face): String = when {
+        face.action == KeyAction.Enter -> enterLabel ?: face.label
+        face.action is KeyAction.Text && shift != ShiftState.OFF -> face.label.uppercase()
+        else -> face.label
+    }
 
     /** A one-shot shift lasts for exactly one typed character. */
     private fun typed(action: KeyAction): KeyAction {

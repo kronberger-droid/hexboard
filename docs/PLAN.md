@@ -10,8 +10,9 @@ a phase is finished when its done-when holds on the device, then mark it here.
 | 2 Hex grid | done |
 | 3 Swipes and shift | done |
 | 4 Multitouch | done |
-| 5 Backspace | builds, tests pass; on-device check pending (normal app, browser, Termux) |
-| 6 to 8 | open |
+| 5 Backspace | done |
+| 6 Symbols and editor awareness | builds, tests pass; on-device check pending |
+| 7 to 8 | open |
 
 ## Phase 0: Toolchain on NixOS
 
@@ -77,7 +78,8 @@ a phase is finished when its done-when holds on the device, then mark it here.
 
 - Symbol layer toggle with its own layout data.
 - Enter follows `EditorInfo.imeOptions` (send, search, go, newline).
-- Number and phone fields optionally get a numeric layout.
+- Number, phone and date fields open on the symbols layer, which carries
+  the digits; no separate numeric layout.
 - **Done when:** messaging, search bars, and number fields all behave
   sensibly.
 

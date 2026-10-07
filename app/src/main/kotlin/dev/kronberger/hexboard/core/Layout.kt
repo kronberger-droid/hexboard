@@ -7,6 +7,7 @@ sealed interface KeyAction {
     data object Enter : KeyAction
     data object Shift : KeyAction
     data object Symbols : KeyAction
+    data object Letters : KeyAction
     data object Emoji : KeyAction
 
     // Sideways drags; no layout token produces these.
@@ -91,7 +92,7 @@ class Layout(val keys: List<Key>) {
          * One string per row, keys separated by spaces. Odd rows are drawn
          * half a hex to the right. `·` leaves a cell empty, `top/bottom`
          * makes a split key, and the tokens in [bare] become
-         * label-only edge keys. `␣ ⌫ ⏎ ⇧ 123 😊` are the function keys; any
+         * label-only edge keys. `␣ ⌫ ⏎ ⇧ 123 abc 😊` are the function keys; any
          * other token types itself. [alternates] gives swipe outputs per
          * token. A `:select` or `:move` suffix sets the key's sideways drag.
          */
@@ -131,6 +132,7 @@ class Layout(val keys: List<Key>) {
                 "⏎" -> KeyAction.Enter
                 "⇧" -> KeyAction.Shift
                 "123" -> KeyAction.Symbols
+                "abc" -> KeyAction.Letters
                 "😊" -> KeyAction.Emoji
                 else -> KeyAction.Text(token)
             },
@@ -139,6 +141,25 @@ class Layout(val keys: List<Key>) {
 }
 
 object Layouts {
+    /**
+     * Diagonal extras on the split punctuation keys, in every layer. Only
+     * diagonals: the top and bottom faces already own up and down.
+     */
+    private val punctuation = mapOf(
+        ",/." to mapOf(
+            Direction.UP_LEFT to "\"",
+            Direction.UP_RIGHT to "'",
+            Direction.DOWN_LEFT to ";",
+            Direction.DOWN_RIGHT to ":",
+        ),
+        "!/?" to mapOf(
+            Direction.UP_LEFT to "(",
+            Direction.UP_RIGHT to ")",
+            Direction.DOWN_LEFT to "-",
+            Direction.DOWN_RIGHT to "@",
+        ),
+    )
+
     /**
      * Typewise's honeycomb, read off a screenshot of its German layout with
      * `y` and `z` swapped back to QWERTY places. The two space keys flank
@@ -155,21 +176,30 @@ object Layouts {
             "· x c v b 😊/123 ⏎",
         ),
         bare = setOf("⇧", "⌫"),
-        // Diagonals only: on split keys the top and bottom labels already
-        // occupy the up and down positions.
-        alternates = mapOf(
-            ",/." to mapOf(
-                Direction.UP_LEFT to "\"",
-                Direction.UP_RIGHT to "'",
-                Direction.DOWN_LEFT to ";",
-                Direction.DOWN_RIGHT to ":",
-            ),
-            "!/?" to mapOf(
-                Direction.UP_LEFT to "(",
-                Direction.UP_RIGHT to ")",
-                Direction.DOWN_LEFT to "-",
-                Direction.DOWN_RIGHT to "@",
-            ),
+        alternates = punctuation,
+    )
+
+    /**
+     * Digits and symbols on the same honeycomb, so the spaces, delete and
+     * enter stay where the thumbs expect them. Rarer symbols sit on swipes
+     * of related keys. A tap on the bottom function key goes back to
+     * letters.
+     */
+    val symbols = Layout.parse(
+        listOf(
+            "· 1 2 3 4 5 6",
+            "7 8 9 0 @ # &",
+            "· ,/. ␣:select - + ␣:move !/? ⌫",
+            "( ) / * = % $",
+            "· \" ' : ; 😊/abc ⏎",
+        ),
+        bare = setOf("⌫"),
+        alternates = punctuation + mapOf(
+            "(" to mapOf(Direction.UP_LEFT to "[", Direction.UP_RIGHT to "{", Direction.DOWN_RIGHT to "<"),
+            ")" to mapOf(Direction.UP_LEFT to "]", Direction.UP_RIGHT to "}", Direction.DOWN_LEFT to ">"),
+            "/" to mapOf(Direction.UP_LEFT to "\\", Direction.UP_RIGHT to "|"),
+            "-" to mapOf(Direction.UP_LEFT to "_", Direction.UP_RIGHT to "~"),
+            "$" to mapOf(Direction.UP_LEFT to "€", Direction.UP_RIGHT to "£"),
         ),
     )
 }

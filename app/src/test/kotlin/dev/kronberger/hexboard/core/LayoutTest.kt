@@ -3,6 +3,7 @@ package dev.kronberger.hexboard.core
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LayoutTest {
@@ -50,6 +51,18 @@ class LayoutTest {
         assertEquals(listOf(Sideways.SELECT, Sideways.MOVE, Sideways.EDIT, Sideways.EDIT), keys.map { it.sideways })
         assertEquals(KeyAction.Space, keys[0].face.action)
         assertEquals("␣", keys[1].face.label)
+    }
+
+    @Test
+    fun symbolsHaveEveryDigitOnceAndAWayBack() {
+        val texts = Layouts.symbols.keys.mapNotNull { textOf(it.face) }
+        assertEquals(('0'..'9').map { it.toString() }, texts.filter { it.single().isDigit() }.sorted())
+        assertTrue(Layouts.symbols.keys.any { it.lower?.action == KeyAction.Letters })
+    }
+
+    @Test
+    fun layersShareTheirShapeSoSwitchingKeepsTheHeight() {
+        assertEquals(Layouts.english.fitCells.toSet(), Layouts.symbols.fitCells.toSet())
     }
 
     @Test

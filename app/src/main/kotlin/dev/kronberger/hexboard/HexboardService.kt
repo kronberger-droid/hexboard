@@ -5,6 +5,7 @@ import android.graphics.RectF
 import android.icu.text.BreakIterator
 import android.inputmethodservice.InputMethodService
 import android.os.Build
+import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -49,7 +50,41 @@ class HexboardService : InputMethodService() {
     private var restore: Restore? = null
     private var travel: Travel? = null
 
-    override fun onCreateInputView(): View = KeyboardView(this, Keyboard(Layouts.english), ::onAction)
+    private val keyboard = Keyboard(Layouts.english, Layouts.symbols)
+    private var view: KeyboardView? = null
+
+    override fun onCreateInputView(): View = KeyboardView(this, keyboard, ::onAction).also { view = it }
+
+    override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
+        super.onStartInputView(info, restarting)
+        // Numbers, phone numbers and dates start on the layer with digits.
+        keyboard.showingSymbols = when (info.inputType and InputType.TYPE_MASK_CLASS) {
+            InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> true
+            else -> false
+        }
+        keyboard.enterLabel = when (editorAction(info)) {
+            EditorInfo.IME_ACTION_GO -> "Go"
+            EditorInfo.IME_ACTION_SEARCH -> "Search"
+            EditorInfo.IME_ACTION_SEND -> "Send"
+            EditorInfo.IME_ACTION_NEXT -> "Next"
+            EditorInfo.IME_ACTION_PREVIOUS -> "Prev"
+            EditorInfo.IME_ACTION_DONE -> "Done"
+            else -> null
+        }
+        view?.invalidate()
+    }
+
+    /**
+     * The editor action enter should perform, or null for a plain newline:
+     * when the editor asks for none, or explicitly wants enter to stay a
+     * newline (`IME_FLAG_NO_ENTER_ACTION`, set by most multi-line fields).
+     */
+    private fun editorAction(info: EditorInfo?): Int? {
+        info ?: return null
+        if (info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0) return null
+        return (info.imeOptions and EditorInfo.IME_MASK_ACTION)
+            .takeIf { it != EditorInfo.IME_ACTION_NONE && it != EditorInfo.IME_ACTION_UNSPECIFIED }
+    }
 
     // Landscape would otherwise hand the whole screen to an extract view.
     override fun onEvaluateFullscreenMode(): Boolean = false
@@ -77,10 +112,14 @@ class HexboardService : InputMethodService() {
         when (action) {
             is KeyAction.Text -> type(ic, action.text)
             KeyAction.Space -> type(ic, " ")
-            // Placeholder: imeOptions-aware enter is Phase 6.
             KeyAction.Enter -> {
                 recall.clear()
-                sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
+                val editorAction = editorAction(currentInputEditorInfo)
+                if (editorAction != null) {
+                    ic.performEditorAction(editorAction)
+                } else {
+                    sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
+                }
             }
             KeyAction.Delete -> deleteBack(ic)
             is KeyAction.DragBy -> when (action.drag) {
@@ -97,9 +136,8 @@ class HexboardService : InputMethodService() {
                     if (action.keep) showSelectionToolbar(ic, cursor.start, cursor.end)
                 }
             }
-            // Shift never gets here; Keyboard consumes it. Symbols are Phase 6,
-            // emoji Phase 7.
-            KeyAction.Shift, KeyAction.Symbols, KeyAction.Emoji -> Unit
+            // Keyboard consumes shift and layer switches. Emoji is Phase 7.
+            KeyAction.Shift, KeyAction.Symbols, KeyAction.Letters, KeyAction.Emoji -> Unit
         }
     }
 
