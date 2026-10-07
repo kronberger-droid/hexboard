@@ -30,8 +30,9 @@ a phase is finished when its done-when holds on the device, then mark it here.
   height set in `onMeasure`.
 - Nearest-center hit testing, unit-tested.
 - A tap commits the key's primary character.
-- The layout is a draft of Typewise's hex arrangement, reconstructed and then
-  corrected by Martin on the device.
+- The layout is Typewise's honeycomb in English (QWERTY y and z), read off a
+  screenshot: five rows of 6 and 7 keys, split punctuation keys, bare edge
+  keys.
 - **Done when:** the full layout renders and types lowercase letters.
 
 ## Phase 3: Swipes and shift
