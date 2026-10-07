@@ -56,15 +56,20 @@ a phase is finished when its done-when holds on the device, then mark it here.
 
 - Tap deletes one grapheme cluster. Test with ZWJ emoji (👨‍👩‍👧) and flags.
 - Scrub, from any key without swipe alternates (as in Typewise): dragging
-  left selects by graphemes with a `setSelection` preview, dragging right
-  shrinks the selection, release deletes. Keys with alternates keep their
-  six directions instead. Optionally word steps past some distance.
+  left selects by graphemes with a `setSelection` preview, release deletes.
+  Keys with alternates keep their six directions instead.
 - Recall buffer: dragging right on the same keys mirrors the scrub, bringing
   the last deletion back cluster by cluster as composing text; release
   keeps it, and what was not brought back stays recallable. The buffer is
   invalidated in `onUpdateSelection` when the cursor moves elsewhere.
+- Sideways drags are speed controlled: the first step comes as the drag
+  starts, then speed follows the finger's distance from where it went down
+  (`DragRate`), reversing past that point. Reach is 2000 chars either way
+  of where the drag started (`WINDOW` in the service), not a screen width.
+- The spaces drag too: the left one extends a selection from the cursor,
+  the right one moves the cursor (`␣:select`, `␣:move` in the layout).
 - `core/Touches` finishes every finger already down when a new one lands
-  (Phase 4). A scrub is a long drag, so it is exempt from that.
+  (Phase 4). A drag is long, so it is exempt from that.
 - **Done when:** scrub and recall work in a normal app. Then try a browser
   and Termux; add a live-deletion fallback only if needed.
 

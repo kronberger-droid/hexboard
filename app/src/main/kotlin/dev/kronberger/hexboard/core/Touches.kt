@@ -1,8 +1,9 @@
 package dev.kronberger.hexboard.core
 
 import kotlin.math.abs
-import kotlin.math.floor
 import kotlin.math.hypot
+import kotlin.math.min
+import kotlin.math.sign
 
 /** What a finger produced: a key press to resolve, or an action to perform as is. */
 sealed interface TouchEvent {
@@ -10,8 +11,21 @@ sealed interface TouchEvent {
     data class Act(val action: KeyAction) : TouchEvent
 }
 
-/** Horizontal drag per grapheme cluster while scrubbing. */
-const val SCRUB_STEP_DP = 12f
+/** Offset from the touch-down point below which a drag stands still. */
+const val DRAG_DEAD_DP = 12f
+
+/** Drag speed in clusters per second for every dp beyond [DRAG_DEAD_DP]. */
+const val DRAG_RATE_PER_DP = 0.4f
+
+/** Fastest a drag goes, in clusters per second. */
+const val DRAG_RATE_MAX = 60f
+
+/** Speed of a drag held at some offset from where the finger went down. */
+class DragRate(private val deadPx: Float, private val perPxPerSecond: Float, private val maxPerSecond: Float) {
+    /** Signed clusters per second for a finger [offsetPx] right of its start. */
+    fun at(offsetPx: Float): Float =
+        sign(offsetPx) * min((abs(offsetPx) - deadPx).coerceAtLeast(0f) * perPxPerSecond, maxPerSecond)
+}
 
 /**
  * Tracks every finger on the keyboard by pointer id and turns them into
@@ -23,36 +37,36 @@ const val SCRUB_STEP_DP = 12f
  * be released after the later one and come out second.
  *
  * Keys with swipe alternates read six directions (see [classify]). Every
- * other key reads four: up and down as usual, left to scrub, right to
- * recall. Which of the four is fixed when the finger first passes the
- * threshold, so an up swipe that drifts left stays up.
+ * other key reads four: up and down as usual, left and right as given by
+ * its [Sideways] drag. Which of the four is fixed when the finger first
+ * passes the threshold, so an up swipe that drifts left stays up.
  *
- * Scrub and recall are drags measured in grapheme clusters, one per
- * [scrubStepPx] from where the finger went down. A scrub selects clusters
- * before the cursor and deletes them on release; a recall brings deleted
- * clusters back one by one and keeps them on release. Either shrinks as
- * the finger comes back. A drag is never finished early by another finger,
- * and fingers landing while it runs are ignored.
+ * A sideways drag moves one cluster as it starts, so a quick flick moves
+ * exactly one. While the finger stays down it keeps going at a speed set
+ * by [rate] from how far the finger is from where it went down, and
+ * reverses when the finger crosses back past that point. The caller drives
+ * this with [tick] every frame while [dragging]. A drag is never finished
+ * early by another finger, and fingers landing while it runs are ignored.
  */
-class Touches(private val thresholdPx: Float, private val scrubStepPx: Float) {
+class Touches(private val thresholdPx: Float, private val rate: DragRate) {
 
     private enum class Way { UP, DOWN, LEFT, RIGHT }
 
     private class Touch(val id: Int, val key: Key, val x: Float, val y: Float) {
-        val fourWay get() = key.alternates.isEmpty()
-
         /** Set once the finger passes the threshold; it does not change after. */
         var way: Way? = null
-        val dragging get() = way == Way.LEFT || way == Way.RIGHT
-        var steps = 0
+        var drag: Drag? = null
+        var lastX = x
+        var lastMs = 0L
 
-        /** Clusters covered by a drag ending [dx] from where the finger went down. */
-        fun stepsAt(dx: Float, stepPx: Float) =
-            floor((if (way == Way.LEFT) -dx else dx) / stepPx).toInt().coerceAtLeast(0)
-
-        fun preview(steps: Int) = if (way == Way.LEFT) KeyAction.ScrubTo(steps) else KeyAction.RecallTo(steps)
-        fun end(steps: Int) = if (way == Way.LEFT) KeyAction.ScrubEnd(steps) else KeyAction.RecallEnd(steps)
+        /** Fractional clusters moved but not yet reported. */
+        var carry = 0f
     }
+
+    /** Fingers still down, oldest first. */
+    private val active = mutableListOf<Touch>()
+
+    val dragging get() = active.any { it.drag != null }
 
     /** The four-way direction of a displacement, or null below the threshold. */
     private fun way(dx: Float, dy: Float): Way? = when {
@@ -62,62 +76,95 @@ class Touches(private val thresholdPx: Float, private val scrubStepPx: Float) {
         else -> Way.DOWN
     }
 
-    /** Fingers still down, oldest first. */
-    private val active = mutableListOf<Touch>()
+    private fun dragFor(sideways: Sideways, way: Way): Drag = when (sideways) {
+        Sideways.EDIT -> if (way == Way.LEFT) Drag.SCRUB else Drag.RECALL
+        Sideways.MOVE -> Drag.MOVE
+        Sideways.SELECT -> Drag.SELECT
+    }
+
+    /** The cluster a drag moves as it starts, in that drag's sign convention. */
+    private fun firstStep(drag: Drag, way: Way): Int = when (drag) {
+        Drag.SCRUB, Drag.RECALL -> 1
+        Drag.MOVE, Drag.SELECT -> if (way == Way.LEFT) -1 else 1
+    }
 
     /**
      * Finger [id] went down on [key] at ([x], [y]). [positions] holds the
      * current position of every other finger, used to finish them.
      */
     fun down(id: Int, key: Key?, x: Float, y: Float, positions: Map<Int, Point>): List<TouchEvent> {
-        val (keep, finish) = active.partition { it.dragging }
-        val events = finish.map { t ->
+        val (keep, finish) = active.partition { it.drag != null }
+        val events = finish.flatMap { t ->
             val p = positions[t.id] ?: Point(t.x, t.y)
             finished(t, p.x, p.y)
         }
         active.retainAll(keep)
-        // Typing during a drag would land inside the previewed selection or
-        // recall and leave the drag's offsets pointing at changed text.
+        // Typing during a drag would land inside its selection or recall
+        // and leave the drag's offsets pointing at changed text.
         if (key != null && keep.isEmpty()) active += Touch(id, key, x, y)
         return events
     }
 
-    /** Finger [id] moved to ([x], [y]). Only scrub and recall drags react before release. */
-    fun move(id: Int, x: Float, y: Float): List<TouchEvent> {
-        val t = active.find { it.id == id && it.fourWay } ?: return emptyList()
-        val dx = x - t.x
-        if (t.way == null) t.way = way(dx, y - t.y)
-        if (!t.dragging) return emptyList()
-        val steps = t.stepsAt(dx, scrubStepPx)
-        if (steps == t.steps) return emptyList()
-        t.steps = steps
-        return listOf(TouchEvent.Act(t.preview(steps)))
+    /** Finger [id] moved to ([x], [y]) at [timeMs]. Only starting a drag reacts here. */
+    fun move(id: Int, x: Float, y: Float, timeMs: Long): List<TouchEvent> {
+        val t = active.find { it.id == id } ?: return emptyList()
+        t.lastX = x
+        val sideways = t.key.sideways ?: return emptyList()
+        if (t.way != null) return emptyList()
+        val way = way(x - t.x, y - t.y) ?: return emptyList()
+        t.way = way
+        if (way == Way.UP || way == Way.DOWN) return emptyList()
+        val drag = dragFor(sideways, way)
+        t.drag = drag
+        t.lastMs = timeMs
+        return listOf(TouchEvent.Act(KeyAction.DragBy(drag, firstStep(drag, way))))
+    }
+
+    /** Advance every drag to [nowMs] at the speed its finger's offset asks for. */
+    fun tick(nowMs: Long): List<TouchEvent> = active.mapNotNull { t ->
+        val drag = t.drag ?: return@mapNotNull null
+        val seconds = (nowMs - t.lastMs) / 1000f
+        t.lastMs = nowMs
+        val offset = t.lastX - t.x
+        // A scrub grows leftwards; every other drag counts rightwards.
+        t.carry += rate.at(if (drag == Drag.SCRUB) -offset else offset) * seconds
+        val whole = t.carry.toInt()
+        if (whole == 0) return@mapNotNull null
+        t.carry -= whole
+        TouchEvent.Act(KeyAction.DragBy(drag, whole))
     }
 
     /** Finger [id] lifted at ([x], [y]); empty if it was already finished. */
     fun up(id: Int, x: Float, y: Float): List<TouchEvent> {
         val i = active.indexOfFirst { it.id == id }
         if (i < 0) return emptyList()
-        return listOf(finished(active.removeAt(i), x, y))
+        return finished(active.removeAt(i), x, y)
     }
 
     /** The gesture was taken away, e.g. by the system; drop everything. */
     fun cancel(): List<TouchEvent> {
-        val events = active.filter { it.dragging }.map { TouchEvent.Act(it.end(0)) }
+        val events = active.mapNotNull { t -> t.drag?.let { TouchEvent.Act(KeyAction.DragEnd(it, keep = false)) } }
         active.clear()
         return events
     }
 
-    private fun finished(t: Touch, x: Float, y: Float): TouchEvent {
+    private fun finished(t: Touch, x: Float, y: Float): List<TouchEvent> {
+        t.drag?.let { return listOf(TouchEvent.Act(KeyAction.DragEnd(it))) }
         val dx = x - t.x
         val dy = y - t.y
-        if (!t.fourWay) return TouchEvent.Press(t.key, classify(dx, dy, thresholdPx))
-        if (t.way == null) t.way = way(dx, dy)
-        return when (t.way) {
-            null -> TouchEvent.Press(t.key, Gesture.Tap)
-            Way.LEFT, Way.RIGHT -> TouchEvent.Act(t.end(t.stepsAt(dx, scrubStepPx)))
-            Way.UP -> TouchEvent.Press(t.key, Gesture.Swipe(Direction.UP))
-            Way.DOWN -> TouchEvent.Press(t.key, Gesture.Swipe(Direction.DOWN))
+        val sideways = t.key.sideways ?: return listOf(TouchEvent.Press(t.key, classify(dx, dy, thresholdPx)))
+        return when (val way = t.way ?: way(dx, dy)) {
+            null -> listOf(TouchEvent.Press(t.key, Gesture.Tap))
+            Way.UP -> listOf(TouchEvent.Press(t.key, Gesture.Swipe(Direction.UP)))
+            Way.DOWN -> listOf(TouchEvent.Press(t.key, Gesture.Swipe(Direction.DOWN)))
+            // A flick too quick for any move event: one step, then done.
+            Way.LEFT, Way.RIGHT -> {
+                val drag = dragFor(sideways, way)
+                listOf(
+                    TouchEvent.Act(KeyAction.DragBy(drag, firstStep(drag, way))),
+                    TouchEvent.Act(KeyAction.DragEnd(drag)),
+                )
+            }
         }
     }
 }

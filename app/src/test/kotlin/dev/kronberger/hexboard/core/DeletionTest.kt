@@ -41,6 +41,26 @@ class DeletionTest {
     }
 
     @Test
+    fun stepClustersMovesWholeClustersEitherWay() {
+        assertEquals(10, stepClusters(boundaries, 2, 1))
+        assertEquals(14, stepClusters(boundaries, 2, 2))
+        assertEquals(1, stepClusters(boundaries, 10, -2))
+    }
+
+    @Test
+    fun stepClustersStopsAtTheEnds() {
+        assertEquals(0, stepClusters(boundaries, 1, -5))
+        assertEquals(14, stepClusters(boundaries, 10, 5))
+    }
+
+    @Test
+    fun stepClustersFromInsideAClusterLandsOnItsEdge() {
+        // Offset 5 is inside the family emoji, which spans 2..10.
+        assertEquals(10, stepClusters(boundaries, 5, 1))
+        assertEquals(2, stepClusters(boundaries, 5, -1))
+    }
+
+    @Test
     fun deletionsInARowPileUpInTextOrder() {
         val r = Recall()
         r.record("c", 3, 2)

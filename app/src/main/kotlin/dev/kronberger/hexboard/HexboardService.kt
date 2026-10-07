@@ -7,25 +7,42 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import dev.kronberger.hexboard.core.Cursor
+import dev.kronberger.hexboard.core.Drag
 import dev.kronberger.hexboard.core.KeyAction
 import dev.kronberger.hexboard.core.Keyboard
 import dev.kronberger.hexboard.core.Layouts
 import dev.kronberger.hexboard.core.Recall
 import dev.kronberger.hexboard.core.clusterEnd
 import dev.kronberger.hexboard.core.clusterStart
+import dev.kronberger.hexboard.core.stepClusters
 
 class HexboardService : InputMethodService() {
 
     private val cursor = Cursor()
     private val recall = Recall()
 
-    /** A scrub in progress: where it started and the text it can reach. */
-    private class Scrub(val cursor: Int, val before: String, val boundaries: List<Int>)
-    private var scrub: Scrub? = null
+    /** A scrub in progress: where it started, the text it can reach, how much is selected. */
+    private class Scrub(val cursor: Int, val before: String, val boundaries: List<Int>) {
+        var steps = 0
+    }
 
-    /** A recall drag in progress: where it inserts and the run it can bring back. */
-    private class Restore(val cursor: Int, val run: String, val boundaries: List<Int>)
+    /** A recall drag in progress: where it inserts, the run, how much is shown. */
+    private class Restore(val cursor: Int, val run: String, val boundaries: List<Int>) {
+        var steps = 0
+    }
+
+    /**
+     * Text around the selection at the start of a cursor or selection drag,
+     * with cluster boundaries in editor offsets. [anchor] stays put while
+     * [focus] moves; for a cursor drag they are the same.
+     */
+    private class Travel(val start: Int, val boundaries: List<Int>, var anchor: Int, var focus: Int) {
+        fun step(from: Int, n: Int) = start + stepClusters(boundaries, from - start, n)
+    }
+
+    private var scrub: Scrub? = null
     private var restore: Restore? = null
+    private var travel: Travel? = null
 
     override fun onCreateInputView(): View = KeyboardView(this, Keyboard(Layouts.english), ::onAction)
 
@@ -38,6 +55,7 @@ class HexboardService : InputMethodService() {
         recall.clear()
         scrub = null
         restore = null
+        travel = null
     }
 
     override fun onUpdateSelection(
@@ -60,10 +78,16 @@ class HexboardService : InputMethodService() {
                 sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
             }
             KeyAction.Delete -> deleteBack(ic)
-            is KeyAction.ScrubTo -> scrubTo(ic, action.steps)
-            is KeyAction.ScrubEnd -> scrubEnd(ic, action.steps)
-            is KeyAction.RecallTo -> recallTo(ic, action.steps)
-            is KeyAction.RecallEnd -> recallEnd(ic, action.steps)
+            is KeyAction.DragBy -> when (action.drag) {
+                Drag.SCRUB -> scrubBy(ic, action.delta)
+                Drag.RECALL -> recallBy(ic, action.delta)
+                Drag.MOVE, Drag.SELECT -> travelBy(ic, action.drag, action.delta)
+            }
+            is KeyAction.DragEnd -> when (action.drag) {
+                Drag.SCRUB -> scrubEnd(ic, action.keep)
+                Drag.RECALL -> recallEnd(ic, action.keep)
+                Drag.MOVE, Drag.SELECT -> travel = null
+            }
             // Shift never gets here; Keyboard consumes it. Symbols are Phase 6,
             // emoji Phase 7.
             KeyAction.Shift, KeyAction.Symbols, KeyAction.Emoji -> Unit
@@ -72,11 +96,6 @@ class HexboardService : InputMethodService() {
 
     private fun type(ic: InputConnection, text: String) {
         recall.clear()
-        insert(ic, text)
-    }
-
-    /** Commit [text] over the selection and keep [cursor] in step. */
-    private fun insert(ic: InputConnection, text: String) {
         ic.commitText(text, 1)
         if (cursor.known) cursor.movedBySelf(cursor.start + text.length)
     }
@@ -107,25 +126,27 @@ class HexboardService : InputMethodService() {
         recall.record(before.substring(start), from, from - length)
     }
 
-    private fun scrubTo(ic: InputConnection, steps: Int) {
+    private fun scrubBy(ic: InputConnection, delta: Int) {
         val s = scrub ?: startScrub(ic) ?: return
-        val start = selectionStart(s, steps)
+        // Clamped here, so turning back reacts at once however long the
+        // finger was held past the start of the text.
+        s.steps = (s.steps + delta).coerceIn(0, s.boundaries.size - 1)
+        val start = selectionStart(s)
         ic.setSelection(start, s.cursor)
         cursor.movedBySelf(start, s.cursor)
     }
 
     private fun startScrub(ic: InputConnection): Scrub? {
         if (!cursor.known) return null
-        val before = ic.getTextBeforeCursor(SCRUB_LOOKBACK, 0)?.toString() ?: return null
+        val before = ic.getTextBeforeCursor(WINDOW, 0)?.toString() ?: return null
         return Scrub(cursor.start, before, boundaries(before)).also { scrub = it }
     }
 
-    private fun scrubEnd(ic: InputConnection, steps: Int) {
-        // A quick flick ends without any preview having started the scrub.
-        val s = scrub ?: startScrub(ic) ?: return
+    private fun scrubEnd(ic: InputConnection, keep: Boolean) {
+        val s = scrub ?: return
         scrub = null
-        val start = selectionStart(s, steps)
-        if (start == s.cursor) {
+        val start = selectionStart(s)
+        if (!keep || start == s.cursor) {
             ic.setSelection(s.cursor, s.cursor)
             cursor.movedBySelf(s.cursor)
             return
@@ -138,13 +159,18 @@ class HexboardService : InputMethodService() {
         recall.record(s.before.substring(s.before.length - (s.cursor - start)), s.cursor, start)
     }
 
+    /** Absolute editor offset where the scrub's selection starts. */
+    private fun selectionStart(s: Scrub) =
+        s.cursor - (s.before.length - clusterStart(s.boundaries, s.steps))
+
     /**
-     * Show the first [steps] clusters of the recall run as composing text, so
-     * dragging back can take them out again without touching committed text.
+     * Show the first clusters of the recall run as composing text, so turning
+     * back can take them out again without touching committed text.
      */
-    private fun recallTo(ic: InputConnection, steps: Int) {
+    private fun recallBy(ic: InputConnection, delta: Int) {
         val r = restore ?: startRestore() ?: return
-        val shown = r.run.substring(0, clusterEnd(r.boundaries, steps))
+        r.steps = (r.steps + delta).coerceIn(0, r.boundaries.size - 1)
+        val shown = r.run.substring(0, clusterEnd(r.boundaries, r.steps))
         ic.setComposingText(shown, 1)
         cursor.movedBySelf(r.cursor + shown.length)
     }
@@ -155,22 +181,40 @@ class HexboardService : InputMethodService() {
         return Restore(cursor.start, run, boundaries(run)).also { restore = it }
     }
 
-    private fun recallEnd(ic: InputConnection, steps: Int) {
-        // A quick flick ends without any preview having started the recall.
-        val r = restore ?: startRestore() ?: return
+    private fun recallEnd(ic: InputConnection, keep: Boolean) {
+        val r = restore ?: return
         restore = null
-        val length = clusterEnd(r.boundaries, steps)
+        val length = if (keep) clusterEnd(r.boundaries, r.steps) else 0
         ic.beginBatchEdit()
         ic.setComposingText(r.run.substring(0, length), 1)
         ic.finishComposingText()
         ic.endBatchEdit()
         cursor.movedBySelf(r.cursor + length)
-        recall.restored(length, r.cursor + length)
+        if (length > 0) recall.restored(length, r.cursor + length)
     }
 
-    /** Absolute editor offset where a scrub of [steps] clusters starts. */
-    private fun selectionStart(s: Scrub, steps: Int) =
-        s.cursor - (s.before.length - clusterStart(s.boundaries, steps))
+    /** Move the cursor, or the selection's moving end, by [delta] clusters. */
+    private fun travelBy(ic: InputConnection, drag: Drag, delta: Int) {
+        val t = travel ?: startTravel(ic, drag) ?: return
+        t.focus = t.step(t.focus, delta)
+        if (drag == Drag.MOVE) t.anchor = t.focus
+        val (start, end) = minOf(t.anchor, t.focus) to maxOf(t.anchor, t.focus)
+        ic.setSelection(start, end)
+        cursor.movedBySelf(start, end)
+    }
+
+    private fun startTravel(ic: InputConnection, drag: Drag): Travel? {
+        if (!cursor.known) return null
+        val before = ic.getTextBeforeCursor(WINDOW, 0)?.toString() ?: return null
+        val selected = if (cursor.start < cursor.end) ic.getSelectedText(0)?.toString().orEmpty() else ""
+        val after = ic.getTextAfterCursor(WINDOW, 0)?.toString().orEmpty()
+        recall.clear()
+        // A selection drag moves the end of any existing selection; a cursor
+        // drag starts from that end, collapsed.
+        val (anchor, focus) = if (drag == Drag.SELECT) cursor.start to cursor.end else cursor.end to cursor.end
+        val start = cursor.start - before.length
+        return Travel(start, boundaries(before + selected + after), anchor, focus).also { travel = it }
+    }
 
     /** Grapheme cluster boundaries of [text], from 0 to its length. */
     private fun boundaries(text: CharSequence): List<Int> {
@@ -183,7 +227,7 @@ class HexboardService : InputMethodService() {
         /** Enough for any single cluster, including long ZWJ emoji sequences. */
         const val LOOKBACK = 64
 
-        /** How far back one scrub can reach. */
-        const val SCRUB_LOOKBACK = 2000
+        /** How far one drag can reach on either side of where it started. */
+        const val WINDOW = 2000
     }
 }

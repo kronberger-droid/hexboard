@@ -14,6 +14,21 @@ fun clusterEnd(boundaries: List<Int>, steps: Int): Int =
     boundaries[steps.coerceIn(0, boundaries.size - 1)]
 
 /**
+ * The offset [n] clusters right of [from] (left if negative), stopping at
+ * either end of the text. From inside a cluster, the first step lands on
+ * that cluster's edge in the direction of travel.
+ */
+fun stepClusters(boundaries: List<Int>, from: Int, n: Int): Int {
+    val found = boundaries.binarySearch(from)
+    val i = when {
+        found >= 0 -> found
+        n < 0 -> -found - 1
+        else -> -found - 2
+    }
+    return boundaries[(i + n).coerceIn(0, boundaries.size - 1)]
+}
+
+/**
  * Our view of the editor's selection. The editor reports selection changes
  * asynchronously, so after two quick edits the report for the first can
  * arrive after the second. Positions our own edits produced are therefore

@@ -8,6 +8,7 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
+import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
@@ -20,7 +21,10 @@ import dev.kronberger.hexboard.core.Keyboard
 import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
 import dev.kronberger.hexboard.core.ShiftState
 import dev.kronberger.hexboard.core.Point
-import dev.kronberger.hexboard.core.SCRUB_STEP_DP
+import dev.kronberger.hexboard.core.DRAG_DEAD_DP
+import dev.kronberger.hexboard.core.DRAG_RATE_MAX
+import dev.kronberger.hexboard.core.DRAG_RATE_PER_DP
+import dev.kronberger.hexboard.core.DragRate
 import dev.kronberger.hexboard.core.TouchEvent
 import dev.kronberger.hexboard.core.Touches
 import dev.kronberger.hexboard.core.keyboardHeightPx
@@ -68,7 +72,28 @@ class KeyboardView(
     private var grid: HexGrid? = null
     private var paths: Map<Key, Path> = emptyMap()
 
-    private val touches = Touches(swipeThreshold, SCRUB_STEP_DP * density)
+    private val touches = Touches(
+        swipeThreshold,
+        DragRate(DRAG_DEAD_DP * density, DRAG_RATE_PER_DP / density, DRAG_RATE_MAX),
+    )
+
+    /** Advances drags every frame for as long as one is running. */
+    private val ticker = object : Runnable {
+        var scheduled = false
+
+        override fun run() {
+            scheduled = false
+            touches.tick(SystemClock.uptimeMillis()).forEach(::handle)
+            keepTicking()
+        }
+    }
+
+    private fun keepTicking() {
+        if (touches.dragging && !ticker.scheduled) {
+            ticker.scheduled = true
+            postOnAnimation(ticker)
+        }
+    }
 
     init {
         setBackgroundColor(Color.rgb(0x12, 0x12, 0x12))
@@ -137,17 +162,21 @@ class KeyboardView(
                 close()
             }
         }
-        // The bare edge keys sit inside the system's back-gesture strips, and
-        // scrubbing drags away from the edge exactly like a back swipe.
+        // Keys at the screen edges sit inside the system's back-gesture
+        // strips, and a sideways drag from them moves away from the edge
+        // exactly like a back swipe.
         if (Build.VERSION.SDK_INT >= 29) {
-            systemGestureExclusionRects = layout.keys.filter { it.bare }.map { key ->
+            val left = insetLeft + padding + 1
+            val right = w - insetRight - padding - 1
+            systemGestureExclusionRects = layout.keys.mapNotNull { key ->
                 val corners = g.corners(key.pos)
-                Rect(
+                val rect = Rect(
                     corners.minOf { it.x }.toInt().coerceAtLeast(0),
                     corners.minOf { it.y }.toInt(),
                     corners.maxOf { it.x }.toInt().coerceAtMost(w),
                     corners.maxOf { it.y }.toInt(),
                 )
+                rect.takeIf { it.left <= left || it.right >= right }
             }
         }
         labelPaint.textSize = g.radius * 0.6f
@@ -238,7 +267,7 @@ class KeyboardView(
                 touches.down(id, key, event.getX(i), event.getY(i), others).forEach(::handle)
             }
             MotionEvent.ACTION_MOVE -> for (p in 0 until event.pointerCount) {
-                touches.move(event.getPointerId(p), event.getX(p), event.getY(p)).forEach(::handle)
+                touches.move(event.getPointerId(p), event.getX(p), event.getY(p), event.eventTime).forEach(::handle)
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 touches.up(id, event.getX(i), event.getY(i)).forEach(::handle)
@@ -246,6 +275,7 @@ class KeyboardView(
             }
             MotionEvent.ACTION_CANCEL -> touches.cancel().forEach(::handle)
         }
+        keepTicking()
         return true
     }
 

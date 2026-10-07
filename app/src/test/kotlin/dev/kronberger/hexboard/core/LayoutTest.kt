@@ -45,6 +45,35 @@ class LayoutTest {
     }
 
     @Test
+    fun suffixSetsTheSidewaysDragAndKeepsTheKeyItself() {
+        val keys = Layout.parse(listOf("␣:select ␣:move ␣ a")).keys
+        assertEquals(listOf(Sideways.SELECT, Sideways.MOVE, Sideways.EDIT, Sideways.EDIT), keys.map { it.sideways })
+        assertEquals(KeyAction.Space, keys[0].face.action)
+        assertEquals("␣", keys[1].face.label)
+    }
+
+    @Test
+    fun keysWithAlternatesHaveNoSidewaysDrag() {
+        val key = Layout.parse(listOf(",/."), alternates = mapOf(",/." to mapOf(Direction.UP_LEFT to "\""))).keys.single()
+        assertNull(key.sideways)
+    }
+
+    @Test
+    fun englishSpacesSelectOnTheLeftAndMoveOnTheRight() {
+        val spaces = Layouts.english.keys.filter { it.face.action == KeyAction.Space }.sortedBy { it.pos.q }
+        assertEquals(listOf(Sideways.SELECT, Sideways.MOVE), spaces.map { it.sideways })
+    }
+
+    @Test
+    fun dragRateIsZeroInsideTheDeadZoneThenLinearToTheCap() {
+        val rate = DragRate(deadPx = 10f, perPxPerSecond = 2f, maxPerSecond = 50f)
+        assertEquals(0f, rate.at(-8f), 0f)
+        assertEquals(20f, rate.at(20f), 1e-4f)
+        assertEquals(-20f, rate.at(-20f), 1e-4f)
+        assertEquals(50f, rate.at(500f), 0f)
+    }
+
+    @Test
     fun bareKeysAreLeftOutOfFitting() {
         val layout = Layout.parse(listOf("⇧ a ⌫"), bare = setOf("⇧", "⌫"))
         assertEquals(listOf(Axial.fromRowCol(0, 1)), layout.fitCells)

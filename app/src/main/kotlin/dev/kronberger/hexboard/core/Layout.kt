@@ -9,19 +9,40 @@ sealed interface KeyAction {
     data object Symbols : KeyAction
     data object Emoji : KeyAction
 
-    // Backspace drags; no layout token produces these.
+    // Sideways drags; no layout token produces these.
 
-    /** Preview: select [steps] grapheme clusters before the cursor. */
-    data class ScrubTo(val steps: Int) : KeyAction
+    /** Move [drag] on by [delta] grapheme clusters; see [Drag] for the sign. */
+    data class DragBy(val drag: Drag, val delta: Int) : KeyAction
 
-    /** Release: delete [steps] clusters before the cursor, or none. */
-    data class ScrubEnd(val steps: Int) : KeyAction
+    /** The finger lifted ([keep]) or the gesture was taken away (not [keep]). */
+    data class DragEnd(val drag: Drag, val keep: Boolean = true) : KeyAction
+}
 
-    /** Preview: show the first [steps] clusters of the recall run at the cursor. */
-    data class RecallTo(val steps: Int) : KeyAction
+/** What a sideways drag in progress does. A positive delta means: */
+enum class Drag {
+    /** select one more cluster before the cursor, deleted on release; */
+    SCRUB,
 
-    /** Release: keep the first [steps] clusters of the recall run, or none. */
-    data class RecallEnd(val steps: Int) : KeyAction
+    /** bring back one more cluster of the last deletion; */
+    RECALL,
+
+    /** move the cursor one cluster right; */
+    MOVE,
+
+    /** move the selection's moving end one cluster right. */
+    SELECT,
+}
+
+/** What dragging sideways on a key does. */
+enum class Sideways {
+    /** Left scrubs, right recalls. */
+    EDIT,
+
+    /** Either way moves the cursor. */
+    MOVE,
+
+    /** Either way extends a selection from the cursor. */
+    SELECT,
 }
 
 /** What one key, or one half of a split key, shows and does. */
@@ -32,7 +53,9 @@ data class Face(val label: String, val action: KeyAction)
  * [face], tapping or swiping down its [lower] face. A [bare] key is drawn as
  * its label only and may hang off the keyboard's edge, so it is left out
  * when fitting the grid to the screen.
- * [alternates] is the text a swipe in each direction types instead.
+ * [alternates] is the text a swipe in each direction types instead. A key
+ * with alternates reads six swipe directions and has no [sideways] drag;
+ * every other key reads four, with left and right given by [sideways].
  */
 data class Key(
     val pos: Axial,
@@ -40,6 +63,7 @@ data class Key(
     val lower: Face? = null,
     val bare: Boolean = false,
     val alternates: Map<Direction, String> = emptyMap(),
+    val sideways: Sideways? = if (alternates.isEmpty()) Sideways.EDIT else null,
 )
 
 class Layout(val keys: List<Key>) {
@@ -61,6 +85,7 @@ class Layout(val keys: List<Key>) {
 
     companion object {
         private const val EMPTY = "·"
+        private val MODIFIERS = mapOf(":select" to Sideways.SELECT, ":move" to Sideways.MOVE)
 
         /**
          * One string per row, keys separated by spaces. Odd rows are drawn
@@ -68,7 +93,7 @@ class Layout(val keys: List<Key>) {
          * makes a split key, and the tokens in [bare] become
          * label-only edge keys. `␣ ⌫ ⏎ ⇧ 123 😊` are the function keys; any
          * other token types itself. [alternates] gives swipe outputs per
-         * token.
+         * token. A `:select` or `:move` suffix sets the key's sideways drag.
          */
         fun parse(
             rows: List<String>,
@@ -78,13 +103,21 @@ class Layout(val keys: List<Key>) {
             rows.flatMapIndexed { row, line ->
                 line.trim().split(Regex("\\s+")).mapIndexedNotNull { col, token ->
                     if (token == EMPTY) return@mapIndexedNotNull null
-                    val halves = if (token.length > 1) token.split("/", limit = 2) else listOf(token)
+                    val modifier = MODIFIERS.keys.firstOrNull { token.endsWith(it) && token.length > it.length }
+                    val base = token.removeSuffix(modifier.orEmpty())
+                    val halves = if (base.length > 1) base.split("/", limit = 2) else listOf(base)
+                    val alts = alternates[token].orEmpty()
                     Key(
                         pos = Axial.fromRowCol(row, col),
                         face = faceFor(halves[0]),
                         lower = halves.getOrNull(1)?.let(::faceFor),
                         bare = token in bare,
-                        alternates = alternates[token].orEmpty(),
+                        alternates = alts,
+                        sideways = when {
+                            alts.isNotEmpty() -> null
+                            modifier != null -> MODIFIERS.getValue(modifier)
+                            else -> Sideways.EDIT
+                        },
                     )
                 }
             },
@@ -110,13 +143,14 @@ object Layouts {
      * Typewise's honeycomb, read off a screenshot of its German layout with
      * `y` and `z` swapped back to QWERTY places. The two space keys flank
      * `f h` in the middle row; shift and delete hang off the screen edges
-     * beside them.
+     * beside them. Dragging the left space selects, the right one moves the
+     * cursor.
      */
     val english = Layout.parse(
         listOf(
             "· w e t y i o",
             "q a r g u l p",
-            "⇧ ,/. ␣ f h ␣ !/? ⌫",
+            "⇧ ,/. ␣:select f h ␣:move !/? ⌫",
             "z s d n m j k",
             "· x c v b 😊/123 ⏎",
         ),
