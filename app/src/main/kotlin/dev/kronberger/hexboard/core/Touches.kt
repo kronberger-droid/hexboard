@@ -24,12 +24,14 @@ const val SCRUB_STEP_DP = 12f
  *
  * Keys with swipe alternates read six directions (see [classify]). Every
  * other key reads four: up and down as usual, left to scrub, right to
- * recall the last deletion. Which of the four is fixed when the finger
- * first passes the threshold, so an up swipe that drifts left stays up.
+ * recall. Which of the four is fixed when the finger first passes the
+ * threshold, so an up swipe that drifts left stays up.
  *
- * A scrub selects one grapheme cluster per [scrubStepPx] dragged left of
- * where the finger went down, shrinks again as it comes back, and deletes
- * the selection on release. It is never finished early by another finger,
+ * Scrub and recall are drags measured in grapheme clusters, one per
+ * [scrubStepPx] from where the finger went down. A scrub selects clusters
+ * before the cursor and deletes them on release; a recall brings deleted
+ * clusters back one by one and keeps them on release. Either shrinks as
+ * the finger comes back. A drag is never finished early by another finger,
  * and fingers landing while it runs are ignored.
  */
 class Touches(private val thresholdPx: Float, private val scrubStepPx: Float) {
@@ -41,8 +43,15 @@ class Touches(private val thresholdPx: Float, private val scrubStepPx: Float) {
 
         /** Set once the finger passes the threshold; it does not change after. */
         var way: Way? = null
-        val scrubbing get() = way == Way.LEFT
+        val dragging get() = way == Way.LEFT || way == Way.RIGHT
         var steps = 0
+
+        /** Clusters covered by a drag ending [dx] from where the finger went down. */
+        fun stepsAt(dx: Float, stepPx: Float) =
+            floor((if (way == Way.LEFT) -dx else dx) / stepPx).toInt().coerceAtLeast(0)
+
+        fun preview(steps: Int) = if (way == Way.LEFT) KeyAction.ScrubTo(steps) else KeyAction.RecallTo(steps)
+        fun end(steps: Int) = if (way == Way.LEFT) KeyAction.ScrubEnd(steps) else KeyAction.RecallEnd(steps)
     }
 
     /** The four-way direction of a displacement, or null below the threshold. */
@@ -61,28 +70,28 @@ class Touches(private val thresholdPx: Float, private val scrubStepPx: Float) {
      * current position of every other finger, used to finish them.
      */
     fun down(id: Int, key: Key?, x: Float, y: Float, positions: Map<Int, Point>): List<TouchEvent> {
-        val (keep, finish) = active.partition { it.scrubbing }
+        val (keep, finish) = active.partition { it.dragging }
         val events = finish.map { t ->
             val p = positions[t.id] ?: Point(t.x, t.y)
             finished(t, p.x, p.y)
         }
         active.retainAll(keep)
-        // Typing during a scrub would replace the previewed selection and
-        // leave the scrub's offsets pointing at changed text.
+        // Typing during a drag would land inside the previewed selection or
+        // recall and leave the drag's offsets pointing at changed text.
         if (key != null && keep.isEmpty()) active += Touch(id, key, x, y)
         return events
     }
 
-    /** Finger [id] moved to ([x], [y]). Only scrubs react before release. */
+    /** Finger [id] moved to ([x], [y]). Only scrub and recall drags react before release. */
     fun move(id: Int, x: Float, y: Float): List<TouchEvent> {
         val t = active.find { it.id == id && it.fourWay } ?: return emptyList()
         val dx = x - t.x
         if (t.way == null) t.way = way(dx, y - t.y)
-        if (!t.scrubbing) return emptyList()
-        val steps = floor(-dx / scrubStepPx).toInt().coerceAtLeast(0)
+        if (!t.dragging) return emptyList()
+        val steps = t.stepsAt(dx, scrubStepPx)
         if (steps == t.steps) return emptyList()
         t.steps = steps
-        return listOf(TouchEvent.Act(KeyAction.ScrubTo(steps)))
+        return listOf(TouchEvent.Act(t.preview(steps)))
     }
 
     /** Finger [id] lifted at ([x], [y]); empty if it was already finished. */
@@ -94,19 +103,19 @@ class Touches(private val thresholdPx: Float, private val scrubStepPx: Float) {
 
     /** The gesture was taken away, e.g. by the system; drop everything. */
     fun cancel(): List<TouchEvent> {
-        val events = active.filter { it.scrubbing }.map { TouchEvent.Act(KeyAction.ScrubEnd(0)) }
+        val events = active.filter { it.dragging }.map { TouchEvent.Act(it.end(0)) }
         active.clear()
         return events
     }
 
     private fun finished(t: Touch, x: Float, y: Float): TouchEvent {
-        if (t.scrubbing) return TouchEvent.Act(KeyAction.ScrubEnd(t.steps))
         val dx = x - t.x
         val dy = y - t.y
         if (!t.fourWay) return TouchEvent.Press(t.key, classify(dx, dy, thresholdPx))
-        return when (t.way ?: way(dx, dy)) {
-            null, Way.LEFT -> TouchEvent.Press(t.key, Gesture.Tap)
-            Way.RIGHT -> TouchEvent.Act(KeyAction.Recall)
+        if (t.way == null) t.way = way(dx, dy)
+        return when (t.way) {
+            null -> TouchEvent.Press(t.key, Gesture.Tap)
+            Way.LEFT, Way.RIGHT -> TouchEvent.Act(t.end(t.stepsAt(dx, scrubStepPx)))
             Way.UP -> TouchEvent.Press(t.key, Gesture.Swipe(Direction.UP))
             Way.DOWN -> TouchEvent.Press(t.key, Gesture.Swipe(Direction.DOWN))
         }

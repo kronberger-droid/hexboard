@@ -59,9 +59,10 @@ a phase is finished when its done-when holds on the device, then mark it here.
   left selects by graphemes with a `setSelection` preview, dragging right
   shrinks the selection, release deletes. Keys with alternates keep their
   six directions instead. Optionally word steps past some distance.
-- Recall buffer: a right swipe on the same keys re-inserts the last
-  deletion. The buffer is invalidated in `onUpdateSelection` when the
-  cursor moves elsewhere.
+- Recall buffer: dragging right on the same keys mirrors the scrub, bringing
+  the last deletion back cluster by cluster as composing text; release
+  keeps it, and what was not brought back stays recallable. The buffer is
+  invalidated in `onUpdateSelection` when the cursor moves elsewhere.
 - `core/Touches` finishes every finger already down when a new one lands
   (Phase 4). A scrub is a long drag, so it is exempt from that.
 - **Done when:** scrub and recall work in a normal app. Then try a browser

@@ -2,7 +2,6 @@ package dev.kronberger.hexboard.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -34,11 +33,11 @@ class DeletionTest {
     }
 
     @Test
-    fun recallReturnsTheLastDeletionOnce() {
-        val r = Recall()
-        r.record("x", cursorBefore = 5, cursorAfter = 4)
-        assertEquals("x", r.take())
-        assertNull(r.take())
+    fun clusterEndMirrorsClusterStart() {
+        assertEquals(0, clusterEnd(boundaries, 0))
+        assertEquals(1, clusterEnd(boundaries, 1))
+        assertEquals(10, clusterEnd(boundaries, 3))
+        assertEquals(14, clusterEnd(boundaries, 99))
     }
 
     @Test
@@ -46,7 +45,7 @@ class DeletionTest {
         val r = Recall()
         r.record("c", 3, 2)
         r.record("b", 2, 1)
-        assertEquals("bc", r.take())
+        assertEquals("bc", r.run)
     }
 
     @Test
@@ -54,7 +53,26 @@ class DeletionTest {
         val r = Recall()
         r.record("c", 3, 2)
         r.record("z", 9, 8)
-        assertEquals("z", r.take())
+        assertEquals("z", r.run)
+    }
+
+    @Test
+    fun partialRestoreLeavesTheRestRecallable() {
+        val r = Recall()
+        r.record("abc", 5, 2)
+        r.restored(1, cursorAfter = 3)
+        assertEquals("bc", r.run)
+        // Deleting right there again piles onto what is left.
+        r.record("a", 3, 2)
+        assertEquals("abc", r.run)
+    }
+
+    @Test
+    fun fullRestoreEmptiesTheRun() {
+        val r = Recall()
+        r.record("ab", 5, 3)
+        r.restored(2, cursorAfter = 5)
+        assertEquals("", r.run)
     }
 
     @Test

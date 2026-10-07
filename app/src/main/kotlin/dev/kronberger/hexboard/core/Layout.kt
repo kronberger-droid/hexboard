@@ -17,8 +17,11 @@ sealed interface KeyAction {
     /** Release: delete [steps] clusters before the cursor, or none. */
     data class ScrubEnd(val steps: Int) : KeyAction
 
-    /** Re-insert the most recent run of deletions. */
-    data object Recall : KeyAction
+    /** Preview: show the first [steps] clusters of the recall run at the cursor. */
+    data class RecallTo(val steps: Int) : KeyAction
+
+    /** Release: keep the first [steps] clusters of the recall run, or none. */
+    data class RecallEnd(val steps: Int) : KeyAction
 }
 
 /** What one key, or one half of a split key, shows and does. */

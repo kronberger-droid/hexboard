@@ -9,6 +9,10 @@ package dev.kronberger.hexboard.core
 fun clusterStart(boundaries: List<Int>, steps: Int): Int =
     boundaries[(boundaries.size - 1 - steps).coerceAtLeast(0)]
 
+/** Where the first [steps] clusters of a text end; the mirror of [clusterStart]. */
+fun clusterEnd(boundaries: List<Int>, steps: Int): Int =
+    boundaries[steps.coerceIn(0, boundaries.size - 1)]
+
 /**
  * Our view of the editor's selection. The editor reports selection changes
  * asynchronously, so after two quick edits the report for the first can
@@ -53,9 +57,9 @@ class Cursor {
 }
 
 /**
- * The text deleted most recently, so a swipe right on backspace can put it
- * back. Deletions made one after another at the same spot pile up into one
- * run. Typing or moving the cursor elsewhere should [clear] it.
+ * The text deleted most recently, so dragging right can put it back cluster
+ * by cluster. Deletions made one after another at the same spot pile up into
+ * one run. Typing or moving the cursor elsewhere should [clear] it.
  */
 class Recall {
     private var text = ""
@@ -68,8 +72,19 @@ class Recall {
         cursor = cursorAfter
     }
 
-    /** The run to re-insert, consumed. */
-    fun take(): String? = text.ifEmpty { null }.also { clear() }
+    /** The run waiting to be re-inserted, in text order; empty if none. */
+    val run: String get() = text
+
+    /**
+     * The first [length] chars of the run went back in, leaving the cursor at
+     * [cursorAfter]. The rest stays recallable from there, and deleting there
+     * again piles onto it as usual.
+     */
+    fun restored(length: Int, cursorAfter: Int) {
+        if (length >= text.length) return clear()
+        text = text.substring(length)
+        cursor = cursorAfter
+    }
 
     fun clear() {
         text = ""

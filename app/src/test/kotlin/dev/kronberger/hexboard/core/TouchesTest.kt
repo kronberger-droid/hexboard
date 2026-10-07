@@ -117,7 +117,7 @@ class TouchesTest {
     fun swipeRightOnBackspaceRecalls() {
         val t = touches()
         t.down(0, del, 500f, 0f, emptyMap())
-        assertEquals(listOf(act(KeyAction.Recall)), t.up(0, 560f, 10f))
+        assertEquals(listOf(act(KeyAction.RecallEnd(3))), t.up(0, 560f, 10f))
     }
 
     @Test
@@ -127,7 +127,19 @@ class TouchesTest {
         assertEquals(listOf(act(KeyAction.ScrubTo(3))), t.move(0, 440f, 5f))
         assertEquals(listOf(act(KeyAction.ScrubEnd(3))), t.up(0, 440f, 5f))
         t.down(1, a, 500f, 0f, emptyMap())
-        assertEquals(listOf(act(KeyAction.Recall)), t.up(1, 560f, 0f))
+        assertEquals(listOf(act(KeyAction.RecallEnd(3))), t.up(1, 560f, 0f))
+    }
+
+    @Test
+    fun recallDragBringsClustersBackOneByOneAndShrinks() {
+        val t = touches()
+        t.down(0, a, 500f, 0f, emptyMap())
+        assertEquals(listOf(act(KeyAction.RecallTo(2))), t.move(0, 555f, 0f))
+        assertEquals(listOf(act(KeyAction.RecallTo(4))), t.move(0, 585f, 0f))
+        assertEquals(listOf(act(KeyAction.RecallTo(1))), t.move(0, 530f, 0f))
+        // Not finished by a finger landing meanwhile, which is ignored.
+        assertEquals(none, t.down(1, b, 0f, 0f, mapOf(0 to Point(530f, 0f))))
+        assertEquals(listOf(act(KeyAction.RecallEnd(1))), t.up(0, 530f, 0f))
     }
 
     @Test
