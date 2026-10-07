@@ -14,9 +14,10 @@ sealed interface KeyAction {
 data class Face(val label: String, val action: KeyAction)
 
 /**
- * A key on one hex. A split key has a [lower] face covering the bottom half
- * of the hex. A [bare] key is drawn as its label only and may hang off the
- * keyboard's edge, so it is left out when fitting the grid to the screen.
+ * A key on one hex. A split key is still one button: tapping or swiping up
+ * gives its [face], swiping down its [lower] face. A [bare] key is drawn as
+ * its label only and may hang off the keyboard's edge, so it is left out
+ * when fitting the grid to the screen.
  * [alternates] is the text a swipe in each direction types instead.
  */
 data class Key(
@@ -25,10 +26,7 @@ data class Key(
     val lower: Face? = null,
     val bare: Boolean = false,
     val alternates: Map<Direction, String> = emptyMap(),
-) {
-    /** The face hit by a touch [dy] pixels below the hex's center. */
-    fun faceAt(dy: Float): Face = if (lower != null && dy > 0) lower else face
-}
+)
 
 class Layout(val keys: List<Key>) {
     private val byPos = keys.associateBy { it.pos }
@@ -47,19 +45,13 @@ class Layout(val keys: List<Key>) {
     /** The key under ([x], [y]), snapping to the nearest one. */
     fun keyAt(grid: HexGrid, x: Float, y: Float): Key? = grid.nearest(cells, x, y)?.let(::get)
 
-    /** The face under ([x], [y]), snapping to the nearest key. */
-    fun faceAt(grid: HexGrid, x: Float, y: Float): Face? {
-        val key = keyAt(grid, x, y) ?: return null
-        return key.faceAt(y - grid.center(key.pos).y)
-    }
-
     companion object {
         private const val EMPTY = "·"
 
         /**
          * One string per row, keys separated by spaces. Odd rows are drawn
          * half a hex to the right. `·` leaves a cell empty, `top/bottom`
-         * splits a key into two halves, and the tokens in [bare] become
+         * makes a split key, and the tokens in [bare] become
          * label-only edge keys. `␣ ⌫ ⏎ ⇧ 123 😊` are the function keys; any
          * other token types itself. [alternates] gives swipe outputs per
          * token.

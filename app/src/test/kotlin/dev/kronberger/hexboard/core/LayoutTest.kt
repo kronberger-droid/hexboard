@@ -45,14 +45,6 @@ class LayoutTest {
     }
 
     @Test
-    fun splitKeyTopAndBottomHalvesTypeDifferentFaces() {
-        val layout = Layout.parse(listOf("!/?"))
-        val grid = HexGrid(radius = 10f, originX = 0f, originY = 0f)
-        assertEquals("!", textOf(layout.faceAt(grid, 0f, -5f)))
-        assertEquals("?", textOf(layout.faceAt(grid, 0f, 5f)))
-    }
-
-    @Test
     fun bareKeysAreLeftOutOfFitting() {
         val layout = Layout.parse(listOf("⇧ a ⌫"), bare = setOf("⇧", "⌫"))
         assertEquals(listOf(Axial.fromRowCol(0, 1)), layout.fitCells)

@@ -9,14 +9,17 @@ class Keyboard(val layout: Layout) {
         private set
 
     /**
-     * The action for [gesture] starting on [face] of [key], or null when the
-     * gesture only changes keyboard state.
+     * The action for [gesture] starting on [key], or null when the gesture
+     * only changes keyboard state.
      *
      * A swipe uses the key's alternate for its direction if there is one.
-     * Otherwise up forces a capital, down forces lowercase, and any other
-     * direction falls back to a tap, so a tap that slid does not get lost.
+     * Otherwise, on a split key, down picks the lower face and everything
+     * else the upper one. On a plain key, up forces a capital and down
+     * forces lowercase. Any other direction falls back to a tap, so a tap
+     * that slid does not get lost.
      */
-    fun resolve(key: Key, face: Face, gesture: Gesture): KeyAction? {
+    fun resolve(key: Key, gesture: Gesture): KeyAction? {
+        val face = key.face
         if (face.action == KeyAction.Shift) {
             shift = when (shift) {
                 ShiftState.OFF -> ShiftState.ONCE
@@ -27,6 +30,11 @@ class Keyboard(val layout: Layout) {
         }
         val direction = (gesture as? Gesture.Swipe)?.direction
         direction?.let { key.alternates[it] }?.let { return typed(KeyAction.Text(it)) }
+
+        if (key.lower != null) {
+            val picked = if (direction == Direction.DOWN) key.lower else face
+            return if (picked.action is KeyAction.Text) typed(picked.action) else picked.action
+        }
 
         val action = face.action as? KeyAction.Text ?: return face.action
         val upper = when (direction) {

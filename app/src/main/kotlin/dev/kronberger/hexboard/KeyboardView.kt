@@ -41,6 +41,11 @@ class KeyboardView(
         color = Color.WHITE
         textAlign = Paint.Align.CENTER
     }
+    /** Multi-character labels such as `123`, which would crowd a hex at full size. */
+    private val smallLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textAlign = Paint.Align.CENTER
+    }
     private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(0x9a, 0x9a, 0x9a)
         textAlign = Paint.Align.CENTER
@@ -63,7 +68,6 @@ class KeyboardView(
     private var downX = 0f
     private var downY = 0f
     private var downKey: Key? = null
-    private var downFace: Face? = null
 
     init {
         setBackgroundColor(Color.rgb(0x12, 0x12, 0x12))
@@ -133,6 +137,7 @@ class KeyboardView(
             }
         }
         labelPaint.textSize = g.radius * 0.6f
+        smallLabelPaint.textSize = g.radius * 0.38f
         hintPaint.textSize = g.radius * 0.3f
         iconPaint.strokeWidth = g.radius * 0.06f
     }
@@ -181,7 +186,10 @@ class KeyboardView(
                 drawCentered(canvas, if (keyboard.shift == ShiftState.LOCKED) "⇪" else "⇧", x, y, labelPaint)
                 labelPaint.alpha = 0xff
             }
-            else -> drawCentered(canvas, keyboard.label(face), x, y, labelPaint)
+            else -> {
+                val label = keyboard.label(face)
+                drawCentered(canvas, label, x, y, if (label.length > 1) smallLabelPaint else labelPaint)
+            }
         }
     }
 
@@ -210,24 +218,17 @@ class KeyboardView(
                 downX = event.x
                 downY = event.y
                 downKey = layout.keyAt(g, event.x, event.y)
-                downFace = layout.faceAt(g, event.x, event.y)
             }
             MotionEvent.ACTION_UP -> {
-                val key = downKey
-                val face = downFace
-                if (key != null && face != null) {
+                downKey?.let { key ->
                     val gesture = classify(event.x - downX, event.y - downY, swipeThreshold)
-                    keyboard.resolve(key, face, gesture)?.let(onAction)
+                    keyboard.resolve(key, gesture)?.let(onAction)
                     invalidate()
                 }
                 downKey = null
-                downFace = null
                 performClick()
             }
-            MotionEvent.ACTION_CANCEL -> {
-                downKey = null
-                downFace = null
-            }
+            MotionEvent.ACTION_CANCEL -> downKey = null
         }
         return true
     }

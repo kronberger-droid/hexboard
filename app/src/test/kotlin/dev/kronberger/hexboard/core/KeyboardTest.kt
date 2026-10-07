@@ -15,8 +15,7 @@ class KeyboardTest {
     private val punct = layout.keys[2]
     private val space = layout.keys[3]
 
-    private fun Keyboard.press(key: Key, gesture: Gesture = Gesture.Tap, face: Face = key.face) =
-        resolve(key, face, gesture)
+    private fun Keyboard.press(key: Key, gesture: Gesture = Gesture.Tap) = resolve(key, gesture)
 
     private fun text(s: String) = KeyAction.Text(s)
     private fun swipe(d: Direction) = Gesture.Swipe(d)
@@ -75,10 +74,26 @@ class KeyboardTest {
     }
 
     @Test
-    fun unmappedSwipeFallsBackToTheFaceTouched() {
+    fun unmappedSwipeFallsBackToATap() {
         val kb = Keyboard(layout)
         assertEquals(text("a"), kb.press(a, swipe(Direction.UP_LEFT)))
-        assertEquals(text("."), kb.press(punct, swipe(Direction.UP_LEFT), face = punct.lower!!))
+        assertEquals(text(","), kb.press(punct, swipe(Direction.UP_LEFT)))
+    }
+
+    @Test
+    fun splitKeyIsOneButtonPickedByDirection() {
+        val kb = Keyboard(layout)
+        assertEquals(text(","), kb.press(punct))
+        assertEquals(text(","), kb.press(punct, swipe(Direction.UP)))
+        assertEquals(text("."), kb.press(punct, swipe(Direction.DOWN)))
+    }
+
+    @Test
+    fun splitFunctionKeyGivesEmojiUpAndSymbolsDown() {
+        val key = Layout.parse(listOf("😊/123")).keys.single()
+        val kb = Keyboard(layout)
+        assertEquals(KeyAction.Emoji, kb.press(key, swipe(Direction.UP)))
+        assertEquals(KeyAction.Symbols, kb.press(key, swipe(Direction.DOWN)))
     }
 
     @Test
