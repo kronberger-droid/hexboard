@@ -8,8 +8,9 @@ a phase is finished when its done-when holds on the device, then mark it here.
 | 0 Toolchain | done |
 | 1 Skeleton IME | done |
 | 2 Hex grid | done |
-| 3 Swipes and shift | builds, tests pass; on-device check pending |
-| 4 to 8 | open |
+| 3 Swipes and shift | done |
+| 4 Multitouch | builds, tests pass; on-device check pending |
+| 5 to 8 | open |
 
 ## Phase 0: Toolchain on NixOS
 
@@ -58,6 +59,8 @@ a phase is finished when its done-when holds on the device, then mark it here.
   steps past some distance.
 - Recall buffer: a right swipe re-inserts the last deletion. The buffer is
   invalidated in `onUpdateSelection` when the cursor moves elsewhere.
+- `core/Touches` finishes every finger already down when a new one lands
+  (Phase 4). A scrub is a long drag, so it must be exempt from that.
 - **Done when:** scrub and recall work in a normal app. Then try a browser
   and Termux; add a live-deletion fallback only if needed.
 

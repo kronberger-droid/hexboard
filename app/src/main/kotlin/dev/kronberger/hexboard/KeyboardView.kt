@@ -18,7 +18,9 @@ import dev.kronberger.hexboard.core.KeyAction
 import dev.kronberger.hexboard.core.Keyboard
 import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
 import dev.kronberger.hexboard.core.ShiftState
-import dev.kronberger.hexboard.core.classify
+import dev.kronberger.hexboard.core.Point
+import dev.kronberger.hexboard.core.Press
+import dev.kronberger.hexboard.core.Touches
 import dev.kronberger.hexboard.core.keyboardHeightPx
 
 /** Draws [keyboard]'s layout as a honeycomb and reports resolved actions to [onAction]. */
@@ -64,10 +66,7 @@ class KeyboardView(
     private var grid: HexGrid? = null
     private var paths: Map<Key, Path> = emptyMap()
 
-    /** The touch in progress: where it went down and what it went down on. */
-    private var downX = 0f
-    private var downY = 0f
-    private var downKey: Key? = null
+    private val touches = Touches(swipeThreshold)
 
     init {
         setBackgroundColor(Color.rgb(0x12, 0x12, 0x12))
@@ -211,26 +210,30 @@ class KeyboardView(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val g = grid ?: return false
+        val i = event.actionIndex
+        val id = event.getPointerId(i)
         when (event.actionMasked) {
-            // The key under the finger at touch down is the one that acts;
-            // the release point only decides tap or swipe direction.
-            MotionEvent.ACTION_DOWN -> {
-                downX = event.x
-                downY = event.y
-                downKey = layout.keyAt(g, event.x, event.y)
+            // The key under a finger at touch down is the one that acts; the
+            // release point only decides tap or swipe direction.
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                val others = (0 until event.pointerCount)
+                    .filter { it != i }
+                    .associate { event.getPointerId(it) to Point(event.getX(it), event.getY(it)) }
+                val key = layout.keyAt(g, event.getX(i), event.getY(i))
+                touches.down(id, key, event.getX(i), event.getY(i), others).forEach(::press)
             }
-            MotionEvent.ACTION_UP -> {
-                downKey?.let { key ->
-                    val gesture = classify(event.x - downX, event.y - downY, swipeThreshold)
-                    keyboard.resolve(key, gesture)?.let(onAction)
-                    invalidate()
-                }
-                downKey = null
-                performClick()
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                touches.up(id, event.getX(i), event.getY(i))?.let(::press)
+                if (event.actionMasked == MotionEvent.ACTION_UP) performClick()
             }
-            MotionEvent.ACTION_CANCEL -> downKey = null
+            MotionEvent.ACTION_CANCEL -> touches.cancel()
         }
         return true
+    }
+
+    private fun press(p: Press) {
+        keyboard.resolve(p.key, p.gesture)?.let(onAction)
+        invalidate()
     }
 
     override fun performClick(): Boolean = super.performClick()
