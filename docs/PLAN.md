@@ -12,8 +12,38 @@ a phase is finished when its done-when holds on the device, then mark it here.
 | 4 Multitouch | done |
 | 5 Backspace | done |
 | 6 Symbols and editor awareness | done |
-| 7 Emoji | builds, tests pass; on-device check pending |
-| 8 Polish | open |
+| 7 Emoji | done |
+| 8 Polish | next |
+
+## Workflow
+
+One branch per phase or fix, cut from `main`. Martin merges with
+`git merge --ff-only <branch>` after trying the APK on the phone and
+pushes `main` himself. Every change ends with `gradle testDebugUnitTest
+assembleDebug` inside `nix develop`, and on-device checks are named in
+the hand-over because the JVM tests cannot see them.
+
+## Open threads
+
+Things noticed along the way that belong to no phase yet. Take them up
+when Martin asks, or fold them into Phase 8 where they fit.
+
+- **Drag tuning.** `SWIPE_THRESHOLD_DP` in `core/Gesture.kt`, and
+  `DRAG_DEAD_DP`, `DRAG_RATE_PER_DP`, `DRAG_RATE_MAX` in `core/Touches.kt`.
+  Martin expects to tune these; a settings screen (Phase 8) could expose
+  them.
+- **Selection toolbar** after a left-space drag uses a `SelectRangeGesture`
+  (API 34+). Unverified in Chrome and Compose text fields; if it fails
+  there, the fallback is an in-keyboard cut/copy/paste bar through
+  `performContextMenuAction`.
+- **Drag reach** is 2000 chars either way (`WINDOW` in the service).
+- **Drag interplay untested:** a scrub started over a left-space selection
+  ignores it; recall refuses while a selection exists.
+- **Composing-text recall preview** not yet tried in a browser or Termux.
+- **Symbols:** Typewise's second symbols page (`¥?±` on its function key)
+  is not built; the mark on `=/+` in its screenshot was unreadable.
+- **Emoji:** no skin tones (natural follow-up: long-press popup); the
+  Recent tab only appears after the first pick, shifting the other tabs.
 
 ## Phase 0: Toolchain on NixOS
 
