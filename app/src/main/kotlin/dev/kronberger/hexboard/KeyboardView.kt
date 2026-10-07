@@ -26,10 +26,10 @@ class KeyboardView(
     private val density = resources.displayMetrics.density
     private val padding = 4f * density
 
-    private val keyFill = paint(0x3a3f48)
-    private val lowerFill = paint(0x30343c)
-    private val spaceFill = paint(0x5c616b)
-    private val enterFill = paint(0x3463e0)
+    private val keyFill = paint(0x2e2e2e)
+    private val lowerFill = paint(0x262626)
+    private val spaceFill = paint(0x484848)
+    private val enterFill = paint(0x5a5a5a)
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         textAlign = Paint.Align.CENTER
@@ -45,19 +45,28 @@ class KeyboardView(
     private var downFace: Face? = null
 
     init {
-        setBackgroundColor(Color.rgb(0x16, 0x18, 0x1c))
+        setBackgroundColor(Color.rgb(0x12, 0x12, 0x12))
+    }
+
+    private companion object {
+        /** Height of the system's IME button strip (AOSP navigation_bar_frame_height). */
+        const val IME_NAV_BAR_DP = 48f
     }
 
     private fun paint(rgb: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(rgb shr 16, (rgb shr 8) and 0xff, rgb and 0xff) }
 
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
-        val (l, r, b) = if (Build.VERSION.SDK_INT >= 30) {
+        val (l, r, nav) = if (Build.VERSION.SDK_INT >= 30) {
             val i = insets.getInsets(WindowInsets.Type.navigationBars() or WindowInsets.Type.displayCutout())
             Triple(i.left, i.right, i.bottom)
         } else {
             @Suppress("DEPRECATION")
             Triple(insets.systemWindowInsetLeft, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
         }
+        // With gesture navigation the IME only gets the 24dp gesture inset,
+        // yet the system draws its hide and switcher buttons centered in a
+        // 48dp strip at the bottom of our window. Clear the whole strip.
+        val b = if (nav > 0) maxOf(nav, (IME_NAV_BAR_DP * density).toInt()) else 0
         if (l != insetLeft || r != insetRight || b != insetBottom) {
             insetLeft = l
             insetRight = r
