@@ -102,9 +102,6 @@ class KeyboardView(
     }
 
     private companion object {
-        /** Height of the system's IME button strip (AOSP navigation_bar_frame_height). */
-        const val IME_NAV_BAR_DP = 48f
-
         /** Unit vectors in screen coordinates for placing swipe hints. */
         val HINT_OFFSETS = mapOf(
             Direction.UP to (0f to -1f),
@@ -119,21 +116,11 @@ class KeyboardView(
     private fun paint(rgb: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(rgb shr 16, (rgb shr 8) and 0xff, rgb and 0xff) }
 
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
-        val (l, r, nav) = if (Build.VERSION.SDK_INT >= 30) {
-            val i = insets.getInsets(WindowInsets.Type.navigationBars() or WindowInsets.Type.displayCutout())
-            Triple(i.left, i.right, i.bottom)
-        } else {
-            @Suppress("DEPRECATION")
-            Triple(insets.systemWindowInsetLeft, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
-        }
-        // With gesture navigation the IME only gets the 24dp gesture inset,
-        // yet the system draws its hide and switcher buttons centered in a
-        // 48dp strip at the bottom of our window. Clear the whole strip.
-        val b = if (nav > 0) maxOf(nav, (IME_NAV_BAR_DP * density).toInt()) else 0
-        if (l != insetLeft || r != insetRight || b != insetBottom) {
-            insetLeft = l
-            insetRight = r
-            insetBottom = b
+        val clear = keyboardInsets(insets, density)
+        if (clear.left != insetLeft || clear.right != insetRight || clear.bottom != insetBottom) {
+            insetLeft = clear.left
+            insetRight = clear.right
+            insetBottom = clear.bottom
             requestLayout()
         }
         return insets

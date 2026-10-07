@@ -39,6 +39,10 @@ is no wrapper.
   `adb shell ime set dev.kronberger.hexboard/.HexboardService` switch to it
   without the settings UI.
 
+`nu scripts/emoji.nu` regenerates `app/src/main/assets/emoji.txt` from
+Unicode's `emoji-test.txt`. The asset is committed; rerun it only on an
+Emoji version bump. The panel hides emoji the device's font cannot draw.
+
 Use the devShell's `adb`. The system also ships one, and two `adb` versions
 kill each other's server.
 

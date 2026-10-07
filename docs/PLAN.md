@@ -11,8 +11,9 @@ a phase is finished when its done-when holds on the device, then mark it here.
 | 3 Swipes and shift | done |
 | 4 Multitouch | done |
 | 5 Backspace | done |
-| 6 Symbols and editor awareness | builds, tests pass; on-device check pending |
-| 7 to 8 | open |
+| 6 Symbols and editor awareness | done |
+| 7 Emoji | builds, tests pass; on-device check pending |
+| 8 Polish | open |
 
 ## Phase 0: Toolchain on NixOS
 

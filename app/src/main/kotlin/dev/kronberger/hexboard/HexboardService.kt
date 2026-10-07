@@ -1,6 +1,7 @@
 package dev.kronberger.hexboard
 
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.graphics.RectF
 import android.icu.text.BreakIterator
 import android.inputmethodservice.InputMethodService
@@ -12,6 +13,8 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.HandwritingGesture
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.SelectRangeGesture
+import android.widget.FrameLayout
+import dev.kronberger.hexboard.core.EmojiGroup
 import dev.kronberger.hexboard.core.Cursor
 import dev.kronberger.hexboard.core.Drag
 import dev.kronberger.hexboard.core.KeyAction
@@ -20,6 +23,7 @@ import dev.kronberger.hexboard.core.Layouts
 import dev.kronberger.hexboard.core.Recall
 import dev.kronberger.hexboard.core.clusterEnd
 import dev.kronberger.hexboard.core.clusterStart
+import dev.kronberger.hexboard.core.parseEmojiAsset
 import dev.kronberger.hexboard.core.stepClusters
 
 class HexboardService : InputMethodService() {
@@ -52,8 +56,40 @@ class HexboardService : InputMethodService() {
 
     private val keyboard = Keyboard(Layouts.english, Layouts.symbols)
     private var view: KeyboardView? = null
+    private var emojiPanel: EmojiPanelView? = null
 
-    override fun onCreateInputView(): View = KeyboardView(this, keyboard, ::onAction).also { view = it }
+    /**
+     * The keys and the emoji panel stacked in one frame. The panel copies
+     * the keys' height, and the keys stay laid out but invisible under it,
+     * so switching never resizes the window.
+     */
+    override fun onCreateInputView(): View {
+        val keys = KeyboardView(this, keyboard, ::onAction)
+        val panel = EmojiPanelView(this, lazy { emojiCatalog() }, getSharedPreferences("hexboard", MODE_PRIVATE), keys, ::onAction)
+        panel.visibility = View.GONE
+        view = keys
+        emojiPanel = panel
+        return FrameLayout(this).apply {
+            addView(keys)
+            addView(panel)
+        }
+    }
+
+    /** The bundled emoji, minus any this device's font cannot draw. */
+    private fun emojiCatalog(): List<EmojiGroup> {
+        val paint = Paint()
+        val text = assets.open("emoji.txt").bufferedReader().use { it.readText() }
+        return parseEmojiAsset(text)
+            .map { g -> g.copy(emoji = g.emoji.filter(paint::hasGlyph)) }
+            .filter { it.emoji.isNotEmpty() }
+    }
+
+    private fun showEmoji(show: Boolean) {
+        val panel = emojiPanel ?: return
+        if (show) panel.refresh()
+        panel.visibility = if (show) View.VISIBLE else View.GONE
+        view?.visibility = if (show) View.INVISIBLE else View.VISIBLE
+    }
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
@@ -71,6 +107,7 @@ class HexboardService : InputMethodService() {
             EditorInfo.IME_ACTION_DONE -> "Done"
             else -> null
         }
+        showEmoji(false)
         view?.invalidate()
     }
 
@@ -136,8 +173,11 @@ class HexboardService : InputMethodService() {
                     if (action.keep) showSelectionToolbar(ic, cursor.start, cursor.end)
                 }
             }
-            // Keyboard consumes shift and layer switches. Emoji is Phase 7.
-            KeyAction.Shift, KeyAction.Symbols, KeyAction.Letters, KeyAction.Emoji -> Unit
+            KeyAction.Emoji -> showEmoji(true)
+            // Only the emoji panel sends this; the keys switch layers in Keyboard.
+            KeyAction.Letters -> showEmoji(false)
+            // Keyboard consumes these.
+            KeyAction.Shift, KeyAction.Symbols -> Unit
         }
     }
 
