@@ -9,8 +9,9 @@ a phase is finished when its done-when holds on the device, then mark it here.
 | 1 Skeleton IME | done |
 | 2 Hex grid | done |
 | 3 Swipes and shift | done |
-| 4 Multitouch | builds, tests pass; on-device check pending |
-| 5 to 8 | open |
+| 4 Multitouch | done |
+| 5 Backspace | builds, tests pass; on-device check pending (normal app, browser, Termux) |
+| 6 to 8 | open |
 
 ## Phase 0: Toolchain on NixOS
 

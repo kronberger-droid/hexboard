@@ -8,6 +8,17 @@ sealed interface KeyAction {
     data object Shift : KeyAction
     data object Symbols : KeyAction
     data object Emoji : KeyAction
+
+    // Backspace drags; no layout token produces these.
+
+    /** Preview: select [steps] grapheme clusters before the cursor. */
+    data class ScrubTo(val steps: Int) : KeyAction
+
+    /** Release: delete [steps] clusters before the cursor, or none. */
+    data class ScrubEnd(val steps: Int) : KeyAction
+
+    /** Re-insert the most recent run of deletions. */
+    data object Recall : KeyAction
 }
 
 /** What one key, or one half of a split key, shows and does. */

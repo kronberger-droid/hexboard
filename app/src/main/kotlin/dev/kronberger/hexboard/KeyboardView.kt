@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
 import android.view.MotionEvent
@@ -19,7 +20,8 @@ import dev.kronberger.hexboard.core.Keyboard
 import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
 import dev.kronberger.hexboard.core.ShiftState
 import dev.kronberger.hexboard.core.Point
-import dev.kronberger.hexboard.core.Press
+import dev.kronberger.hexboard.core.SCRUB_STEP_DP
+import dev.kronberger.hexboard.core.TouchEvent
 import dev.kronberger.hexboard.core.Touches
 import dev.kronberger.hexboard.core.keyboardHeightPx
 
@@ -66,7 +68,7 @@ class KeyboardView(
     private var grid: HexGrid? = null
     private var paths: Map<Key, Path> = emptyMap()
 
-    private val touches = Touches(swipeThreshold)
+    private val touches = Touches(swipeThreshold, SCRUB_STEP_DP * density)
 
     init {
         setBackgroundColor(Color.rgb(0x12, 0x12, 0x12))
@@ -133,6 +135,19 @@ class KeyboardView(
                     if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y)
                 }
                 close()
+            }
+        }
+        // The bare edge keys sit inside the system's back-gesture strips, and
+        // scrubbing drags away from the edge exactly like a back swipe.
+        if (Build.VERSION.SDK_INT >= 29) {
+            systemGestureExclusionRects = layout.keys.filter { it.bare }.map { key ->
+                val corners = g.corners(key.pos)
+                Rect(
+                    corners.minOf { it.x }.toInt().coerceAtLeast(0),
+                    corners.minOf { it.y }.toInt(),
+                    corners.maxOf { it.x }.toInt().coerceAtMost(w),
+                    corners.maxOf { it.y }.toInt(),
+                )
             }
         }
         labelPaint.textSize = g.radius * 0.6f
@@ -220,19 +235,25 @@ class KeyboardView(
                     .filter { it != i }
                     .associate { event.getPointerId(it) to Point(event.getX(it), event.getY(it)) }
                 val key = layout.keyAt(g, event.getX(i), event.getY(i))
-                touches.down(id, key, event.getX(i), event.getY(i), others).forEach(::press)
+                touches.down(id, key, event.getX(i), event.getY(i), others).forEach(::handle)
+            }
+            MotionEvent.ACTION_MOVE -> for (p in 0 until event.pointerCount) {
+                touches.move(event.getPointerId(p), event.getX(p), event.getY(p)).forEach(::handle)
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
-                touches.up(id, event.getX(i), event.getY(i))?.let(::press)
+                touches.up(id, event.getX(i), event.getY(i)).forEach(::handle)
                 if (event.actionMasked == MotionEvent.ACTION_UP) performClick()
             }
-            MotionEvent.ACTION_CANCEL -> touches.cancel()
+            MotionEvent.ACTION_CANCEL -> touches.cancel().forEach(::handle)
         }
         return true
     }
 
-    private fun press(p: Press) {
-        keyboard.resolve(p.key, p.gesture)?.let(onAction)
+    private fun handle(e: TouchEvent) {
+        when (e) {
+            is TouchEvent.Press -> keyboard.resolve(e.key, e.gesture)?.let(onAction)
+            is TouchEvent.Act -> onAction(e.action)
+        }
         invalidate()
     }
 
