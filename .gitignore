@@ -1,0 +1,6 @@
+.gradle/
+.kotlin/
+.claude/worktrees/
+build/
+local.properties
+result
