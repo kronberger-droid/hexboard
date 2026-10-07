@@ -1,11 +1,16 @@
 package dev.kronberger.hexboard
 
+import android.graphics.Matrix
+import android.graphics.RectF
 import android.icu.text.BreakIterator
 import android.inputmethodservice.InputMethodService
+import android.os.Build
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.HandwritingGesture
 import android.view.inputmethod.InputConnection
+import android.view.inputmethod.SelectRangeGesture
 import dev.kronberger.hexboard.core.Cursor
 import dev.kronberger.hexboard.core.Drag
 import dev.kronberger.hexboard.core.KeyAction
@@ -86,7 +91,11 @@ class HexboardService : InputMethodService() {
             is KeyAction.DragEnd -> when (action.drag) {
                 Drag.SCRUB -> scrubEnd(ic, action.keep)
                 Drag.RECALL -> recallEnd(ic, action.keep)
-                Drag.MOVE, Drag.SELECT -> travel = null
+                Drag.MOVE -> travel = null
+                Drag.SELECT -> {
+                    travel = null
+                    if (action.keep) showSelectionToolbar(ic, cursor.start, cursor.end)
+                }
             }
             // Shift never gets here; Keyboard consumes it. Symbols are Phase 6,
             // emoji Phase 7.
@@ -214,6 +223,39 @@ class HexboardService : InputMethodService() {
         val (anchor, focus) = if (drag == Drag.SELECT) cursor.start to cursor.end else cursor.end to cursor.end
         val start = cursor.start - before.length
         return Travel(start, boundaries(before + selected + after), anchor, focus).also { travel = it }
+    }
+
+    /**
+     * Open the editor's own cut/copy/paste toolbar over [start]..[end].
+     *
+     * An IME has no direct way to do this; setting the selection never shows
+     * it. A handwriting select gesture does: the editor applies it and then
+     * starts its selection action mode. The gesture names screen areas, not
+     * offsets, so first ask where the selection's first and last characters
+     * are drawn and aim at exactly those. Needs API 34 and an editor that
+     * takes the gesture; otherwise the selection simply stays as it is.
+     */
+    private fun showSelectionToolbar(ic: InputConnection, start: Int, end: Int) {
+        if (Build.VERSION.SDK_INT < 34 || start < 0 || start >= end) return
+        val info = currentInputEditorInfo ?: return
+        if (SelectRangeGesture::class.java !in info.supportedHandwritingGestures) return
+        val screen = resources.displayMetrics
+        val everywhere = RectF(0f, 0f, screen.widthPixels.toFloat(), screen.heightPixels.toFloat())
+        ic.requestTextBoundsInfo(everywhere, mainExecutor) { result ->
+            val bounds = result.textBoundsInfo ?: return@requestTextBoundsInfo
+            if (start < bounds.startIndex || end > bounds.endIndex) return@requestTextBoundsInfo
+            val toScreen = Matrix().also(bounds::getMatrix)
+            fun charArea(i: Int) = RectF().also {
+                bounds.getCharacterBounds(i, it)
+                toScreen.mapRect(it)
+            }
+            val gesture = SelectRangeGesture.Builder()
+                .setSelectionStartArea(charArea(start))
+                .setSelectionEndArea(charArea(end - 1))
+                .setGranularity(HandwritingGesture.GRANULARITY_CHARACTER)
+                .build()
+            currentInputConnection?.performHandwritingGesture(gesture, null, null)
+        }
     }
 
     /** Grapheme cluster boundaries of [text], from 0 to its length. */
