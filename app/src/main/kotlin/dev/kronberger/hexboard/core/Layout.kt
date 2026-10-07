@@ -14,8 +14,8 @@ sealed interface KeyAction {
 data class Face(val label: String, val action: KeyAction)
 
 /**
- * A key on one hex. A split key is still one button: tapping or swiping up
- * gives its [face], swiping down its [lower] face. A [bare] key is drawn as
+ * A key on one hex. A split key is still one button: swiping up gives its
+ * [face], tapping or swiping down its [lower] face. A [bare] key is drawn as
  * its label only and may hang off the keyboard's edge, so it is left out
  * when fitting the grid to the screen.
  * [alternates] is the text a swipe in each direction types instead.

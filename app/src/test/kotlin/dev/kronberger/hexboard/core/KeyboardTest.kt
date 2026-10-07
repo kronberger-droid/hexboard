@@ -77,13 +77,13 @@ class KeyboardTest {
     fun unmappedSwipeFallsBackToATap() {
         val kb = Keyboard(layout)
         assertEquals(text("a"), kb.press(a, swipe(Direction.UP_LEFT)))
-        assertEquals(text(","), kb.press(punct, swipe(Direction.UP_LEFT)))
+        assertEquals(text("."), kb.press(punct, swipe(Direction.UP_LEFT)))
     }
 
     @Test
     fun splitKeyIsOneButtonPickedByDirection() {
         val kb = Keyboard(layout)
-        assertEquals(text(","), kb.press(punct))
+        assertEquals(text("."), kb.press(punct))
         assertEquals(text(","), kb.press(punct, swipe(Direction.UP)))
         assertEquals(text("."), kb.press(punct, swipe(Direction.DOWN)))
     }

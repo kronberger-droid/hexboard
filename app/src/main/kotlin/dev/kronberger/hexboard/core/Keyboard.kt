@@ -13,8 +13,8 @@ class Keyboard(val layout: Layout) {
      * only changes keyboard state.
      *
      * A swipe uses the key's alternate for its direction if there is one.
-     * Otherwise, on a split key, down picks the lower face and everything
-     * else the upper one. On a plain key, up forces a capital and down
+     * Otherwise, on a split key, up picks the upper face and everything else
+     * the lower one, which is the default. On a plain key, up forces a capital and down
      * forces lowercase. Any other direction falls back to a tap, so a tap
      * that slid does not get lost.
      */
@@ -32,7 +32,7 @@ class Keyboard(val layout: Layout) {
         direction?.let { key.alternates[it] }?.let { return typed(KeyAction.Text(it)) }
 
         if (key.lower != null) {
-            val picked = if (direction == Direction.DOWN) key.lower else face
+            val picked = if (direction == Direction.UP) face else key.lower
             return if (picked.action is KeyAction.Text) typed(picked.action) else picked.action
         }
 
