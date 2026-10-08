@@ -23,6 +23,16 @@ class KeyboardTest {
     private fun swipe(d: Direction) = Gesture.Swipe(d)
 
     @Test
+    fun doubleSpaceMakesAPeriodOnlyAfterAWord() {
+        assertTrue(periodForDoubleSpace("hi "))
+        assertTrue(periodForDoubleSpace("7 "))
+        assertEquals(false, periodForDoubleSpace("hi. "))
+        assertEquals(false, periodForDoubleSpace("hi  "))
+        assertEquals(false, periodForDoubleSpace(" "))
+        assertEquals(false, periodForDoubleSpace("hi"))
+    }
+
+    @Test
     fun tapTypesLowercase() {
         assertEquals(text("a"), Keyboard(layout).press(a))
     }

@@ -103,3 +103,11 @@ class Keyboard(private val letters: Layout, private val symbols: Layout = letter
         return action
     }
 }
+
+/**
+ * Whether a second space typed right after a first should turn that one
+ * into `. `: [before] is the text just before the cursor, ending in the
+ * first space, and a letter or digit precedes it.
+ */
+fun periodForDoubleSpace(before: CharSequence): Boolean =
+    before.length >= 2 && before[before.length - 1] == ' ' && before[before.length - 2].isLetterOrDigit()

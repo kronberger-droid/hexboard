@@ -7,6 +7,7 @@ libraries.
 - Honeycomb layout with two space keys in the middle and split keys for
   paired punctuation.
 - Swipe up for capitals, down for lowercase; shift and caps lock.
+  Sentences start with a capital, and a double space types a period.
 - Long-press or swipe up-right on `a o u s` for `ä ö ü ß`.
 - Drag left on almost any key to select backwards and delete, right to
   bring the deletion back. Drags accelerate like a trackpad pointer: slow
@@ -26,6 +27,7 @@ gradle testDebugUnitTest assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Then enable "Hexboard" under the system's keyboard settings.
+Then enable "Hexboard" under the system's keyboard settings, or from the
+Hexboard app, which also holds its settings.
 
 Progress and design notes live in [`docs/PLAN.md`](docs/PLAN.md).

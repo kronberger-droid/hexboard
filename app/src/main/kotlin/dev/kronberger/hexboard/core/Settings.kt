@@ -28,6 +28,7 @@ data class Choice(override val key: String, override val title: String, val opti
 /** Every setting, in the order the settings screen shows them. */
 object Settings {
     val autoCaps = Toggle("auto_caps", "Capitalize sentences", true)
+    val doubleSpace = Toggle("double_space", "Double space types a period", true)
     val haptics = Toggle("haptics", "Vibrate on key press", true)
     val theme = Choice("theme", "Theme", listOf("Follow system", "Light", "Dark"), 0)
     val size = Slider("size_percent", "Keyboard size", 70, 100, 100, "%")
@@ -37,5 +38,5 @@ object Settings {
     val dragGain = Slider("drag_gain", "Fast drag acceleration", 1, 16, DRAG_GAIN_MAX.toInt(), "×")
     val edgeRate = Slider("edge_rate", "Edge drag top speed", 30, 400, DRAG_EDGE_RATE_MAX.toInt(), " per second")
 
-    val all: List<Setting> = listOf(autoCaps, haptics, theme, size, longPress, swipe, dragStep, dragGain, edgeRate)
+    val all: List<Setting> = listOf(autoCaps, doubleSpace, haptics, theme, size, longPress, swipe, dragStep, dragGain, edgeRate)
 }

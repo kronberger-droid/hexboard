@@ -26,6 +26,7 @@ import dev.kronberger.hexboard.core.Settings
 import dev.kronberger.hexboard.core.clusterEnd
 import dev.kronberger.hexboard.core.clusterStart
 import dev.kronberger.hexboard.core.parseEmojiAsset
+import dev.kronberger.hexboard.core.periodForDoubleSpace
 import dev.kronberger.hexboard.core.stepClusters
 
 class HexboardService : InputMethodService() {
@@ -51,6 +52,12 @@ class HexboardService : InputMethodService() {
     private class Travel(val start: Int, val boundaries: List<Int>, var anchor: Int, var focus: Int) {
         fun step(from: Int, n: Int) = start + stepClusters(boundaries, from - start, n)
     }
+
+    /**
+     * The last action typed a space that could start a double space; the
+     * third space in a row does not, so it never stacks periods.
+     */
+    private var lastWasSpace = false
 
     private var scrub: Scrub? = null
     private var restore: Restore? = null
@@ -161,6 +168,7 @@ class HexboardService : InputMethodService() {
         super.onStartInput(attribute, restarting)
         cursor.reset(attribute.initialSelStart, attribute.initialSelEnd)
         recall.clear()
+        lastWasSpace = false
         scrub = null
         restore = null
         travel = null
@@ -174,6 +182,7 @@ class HexboardService : InputMethodService() {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
         if (cursor.reported(newSelStart, newSelEnd)) {
             recall.clear()
+            lastWasSpace = false
             updateCaps()
         }
     }
@@ -182,7 +191,7 @@ class HexboardService : InputMethodService() {
         val ic = currentInputConnection ?: return
         when (action) {
             is KeyAction.Text -> type(ic, action.text)
-            KeyAction.Space -> type(ic, " ")
+            KeyAction.Space -> if (!(lastWasSpace && periodForSpace(ic))) type(ic, " ")
             KeyAction.Enter -> {
                 recall.clear()
                 val editorAction = editorAction(currentInputEditorInfo)
@@ -215,6 +224,26 @@ class HexboardService : InputMethodService() {
         }
         // The editor answers in order, so this already sees the edit above.
         if (action !is KeyAction.DragBy) updateCaps()
+        lastWasSpace = action == KeyAction.Space && !lastWasSpace
+    }
+
+    /**
+     * On the second of two spaces, turn the first into `. ` if it follows a
+     * word. False, changing nothing, when it does not apply here.
+     */
+    private fun periodForSpace(ic: InputConnection): Boolean {
+        if (!prefs[Settings.doubleSpace] || !cursor.known || cursor.start != cursor.end) return false
+        val variation = (currentInputEditorInfo?.inputType ?: 0) and InputType.TYPE_MASK_VARIATION
+        if (variation in NO_PERIOD_VARIATIONS) return false
+        val before = ic.getTextBeforeCursor(2, 0) ?: return false
+        if (!periodForDoubleSpace(before)) return false
+        recall.clear()
+        ic.beginBatchEdit()
+        ic.deleteSurroundingText(1, 0)
+        ic.commitText(". ", 1)
+        ic.endBatchEdit()
+        cursor.movedBySelf(cursor.start + 1)
+        return true
     }
 
     private fun type(ic: InputConnection, text: String) {
@@ -382,6 +411,16 @@ class HexboardService : InputMethodService() {
     private companion object {
         /** Enough for any single cluster, including long ZWJ emoji sequences. */
         const val LOOKBACK = 64
+
+        /** Fields where a period is never typed for the user. */
+        val NO_PERIOD_VARIATIONS = setOf(
+            InputType.TYPE_TEXT_VARIATION_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_URI,
+            InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+            InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
+        )
 
         /** How far one drag can reach on either side of where it started. */
         const val WINDOW = 2000
