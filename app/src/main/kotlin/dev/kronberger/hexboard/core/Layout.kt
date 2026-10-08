@@ -57,6 +57,7 @@ data class Face(val label: String, val action: KeyAction)
  * [alternates] is the text a swipe in each direction types instead. A key
  * with alternates reads six swipe directions and has no [sideways] drag;
  * every other key reads four, with left and right given by [sideways].
+ * [longPress] is the text a finger resting on the key types instead.
  */
 data class Key(
     val pos: Axial,
@@ -65,6 +66,7 @@ data class Key(
     val bare: Boolean = false,
     val alternates: Map<Direction, String> = emptyMap(),
     val sideways: Sideways? = if (alternates.isEmpty()) Sideways.EDIT else null,
+    val longPress: String? = null,
 )
 
 class Layout(val keys: List<Key>) {
@@ -94,12 +96,14 @@ class Layout(val keys: List<Key>) {
          * makes a split key, and the tokens in [bare] become
          * label-only edge keys. `␣ ⌫ ⏎ ⇧ 123 abc 😊` are the function keys; any
          * other token types itself. [alternates] gives swipe outputs per
-         * token. A `:select` or `:move` suffix sets the key's sideways drag.
+         * token and [longPress] the text a long press types. A `:select` or
+         * `:move` suffix sets the key's sideways drag.
          */
         fun parse(
             rows: List<String>,
             bare: Set<String> = emptySet(),
             alternates: Map<String, Map<Direction, String>> = emptyMap(),
+            longPress: Map<String, String> = emptyMap(),
         ): Layout = Layout(
             rows.flatMapIndexed { row, line ->
                 line.trim().split(Regex("\\s+")).mapIndexedNotNull { col, token ->
@@ -119,6 +123,7 @@ class Layout(val keys: List<Key>) {
                             modifier != null -> MODIFIERS.getValue(modifier)
                             else -> Sideways.EDIT
                         },
+                        longPress = longPress[token],
                     )
                 }
             },
@@ -166,6 +171,7 @@ object Layouts {
      * `f h` in the middle row; shift and delete hang off the screen edges
      * beside them. Dragging the left space moves the cursor and dragging
      * enter selects; the right space scrubs and recalls like the letters.
+     * A long press on `a o u` gives the German umlauts.
      */
     val english = Layout.parse(
         listOf(
@@ -177,6 +183,7 @@ object Layouts {
         ),
         bare = setOf("⇧", "⌫"),
         alternates = punctuation,
+        longPress = mapOf("a" to "ä", "o" to "ö", "u" to "ü"),
     )
 
     /**

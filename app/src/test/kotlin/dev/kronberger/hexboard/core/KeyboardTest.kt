@@ -10,6 +10,7 @@ class KeyboardTest {
     private val layout = Layout.parse(
         listOf("a ⇧ ,/. ␣"),
         alternates = mapOf(",/." to mapOf(Direction.DOWN_RIGHT to ":")),
+        longPress = mapOf("a" to "ä"),
     )
     private val a = layout.keys[0]
     private val shiftKey = layout.keys[1]
@@ -24,6 +25,20 @@ class KeyboardTest {
     @Test
     fun tapTypesLowercase() {
         assertEquals(text("a"), Keyboard(layout).press(a))
+    }
+
+    @Test
+    fun holdTypesTheLongPressAndFollowsShift() {
+        val kb = Keyboard(layout)
+        assertEquals(text("ä"), kb.press(a, Gesture.Hold))
+        kb.press(shiftKey)
+        assertEquals(text("Ä"), kb.press(a, Gesture.Hold))
+        assertEquals(ShiftState.OFF, kb.shift)
+    }
+
+    @Test
+    fun holdOnAKeyWithoutALongPressIsATap() {
+        assertEquals(KeyAction.Space, Keyboard(layout).press(space, Gesture.Hold))
     }
 
     @Test

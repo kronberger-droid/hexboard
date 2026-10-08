@@ -1,13 +1,16 @@
 package dev.kronberger.hexboard.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TouchesTest {
 
     private val keys = Layout.parse(
-        listOf("a b c ⌫ ,/. ␣:select ␣:move"),
+        listOf("a b c ⌫ ,/. ␣:select ␣:move o"),
         alternates = mapOf(",/." to mapOf(Direction.UP_LEFT to "\"")),
+        longPress = mapOf("o" to "ö"),
     ).keys
     private val a = keys[0]
     private val b = keys[1]
@@ -16,6 +19,7 @@ class TouchesTest {
     private val punct = keys[4]
     private val selectSpace = keys[5]
     private val moveSpace = keys[6]
+    private val o = keys[7]
     private val tap = Gesture.Tap
     private val none = emptyList<TouchEvent>()
 
@@ -26,12 +30,13 @@ class TouchesTest {
     // Edge strips start at 10 clusters/s and reach 110/s after a second held.
     private val edge = DragEdge(zonePx = 100f, startPerS = 10f, maxPerS = 110f, rampMs = 1000f)
     // Flicks, where tested, are drags faster than 300px/s lifted within 150ms.
-    private fun touches(flickMs: Long = 0) = Touches(50f, gain, flickMs, flickPxPerS = 300f, edge = edge)
+    // Long presses fire after 300ms.
+    private fun touches(flickMs: Long = 0) = Touches(50f, gain, flickMs, flickPxPerS = 300f, edge = edge, holdMs = 300)
 
     // A keyboard 1000px wide with edge strips of 100px, and a flat gain of
     // one cluster per 10px so only the edge changes speed.
     private fun edged(flickMs: Long = 0) =
-        Touches(50f, DragGain(10f, 1e6f, 2e6f, 1f, 0f), flickMs, 300f, edge).also { it.span(0f, 1000f) }
+        Touches(50f, DragGain(10f, 1e6f, 2e6f, 1f, 0f), flickMs, 300f, edge, holdMs = 300).also { it.span(0f, 1000f) }
 
     private fun press(key: Key, g: Gesture = tap) = TouchEvent.Press(key, g)
     private fun by(drag: Drag, delta: Int) = TouchEvent.Act(KeyAction.DragBy(drag, delta))
@@ -314,6 +319,50 @@ class TouchesTest {
         t.down(0, punct, 500f, 0f, emptyMap())
         assertEquals(none, t.move(0, 440f, -20f, timeMs = 0))
         assertEquals(listOf(press(punct, Gesture.Swipe(Direction.UP_LEFT))), t.up(0, 440f, -20f))
+    }
+
+    @Test
+    fun restingOnALongPressKeyFiresOnceItIsDue() {
+        val t = touches()
+        t.down(0, o, 0f, 0f, emptyMap(), timeMs = 1000)
+        assertTrue(t.ticking)
+        assertEquals(none, t.tick(1299))
+        t.move(0, 10f, 5f, timeMs = 1200)
+        assertEquals(listOf(press(o, Gesture.Hold)), t.tick(1300))
+        assertFalse(t.ticking)
+        assertEquals(none, t.up(0, 10f, 5f))
+    }
+
+    @Test
+    fun liftingBeforeTheLongPressIsATap() {
+        val t = touches()
+        t.down(0, o, 0f, 0f, emptyMap(), timeMs = 1000)
+        assertEquals(listOf(press(o)), t.up(0, 0f, 0f))
+        assertEquals(none, t.tick(2000))
+    }
+
+    @Test
+    fun swipingOffALongPressKeyCancelsTheLongPress() {
+        val t = touches()
+        t.down(0, o, 0f, 0f, emptyMap(), timeMs = 1000)
+        t.move(0, 0f, -60f, timeMs = 1100)
+        assertEquals(none, t.tick(2000))
+        assertEquals(listOf(press(o, Gesture.Swipe(Direction.UP))), t.up(0, 0f, -60f))
+    }
+
+    @Test
+    fun keysWithoutALongPressNeverTick() {
+        val t = touches()
+        t.down(0, a, 0f, 0f, emptyMap(), timeMs = 1000)
+        assertFalse(t.ticking)
+        assertEquals(none, t.tick(5000))
+    }
+
+    @Test
+    fun coalesceMergesRunsOfTheSameDragAndDropsWhatCancels() {
+        val steps = listOf(by(Drag.SCRUB, 1), by(Drag.SCRUB, 2), end(Drag.SCRUB), by(Drag.MOVE, 1), by(Drag.MOVE, -1))
+        assertEquals(listOf(by(Drag.SCRUB, 3), end(Drag.SCRUB)), coalesce(steps))
+        assertEquals(listOf(press(a), by(Drag.MOVE, 1)), coalesce(listOf(press(a), by(Drag.MOVE, 1))))
     }
 
     @Test

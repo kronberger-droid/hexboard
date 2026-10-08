@@ -13,6 +13,37 @@ sealed interface TouchEvent {
     data class Act(val action: KeyAction) : TouchEvent
 }
 
+/**
+ * [events] with each run of steps of the same drag merged into one, so the
+ * editor gets one change per batch of touch samples instead of one each.
+ * Steps that cancel out vanish.
+ */
+fun coalesce(events: List<TouchEvent>): List<TouchEvent> {
+    val out = mutableListOf<TouchEvent>()
+    var pending: KeyAction.DragBy? = null
+    fun flush() {
+        pending?.takeIf { it.delta != 0 }?.let { out += TouchEvent.Act(it) }
+        pending = null
+    }
+    for (e in events) {
+        val step = (e as? TouchEvent.Act)?.action as? KeyAction.DragBy
+        val p = pending
+        when {
+            step == null -> {
+                flush()
+                out += e
+            }
+            p != null && p.drag == step.drag -> pending = p.copy(delta = p.delta + step.delta)
+            else -> {
+                flush()
+                pending = step
+            }
+        }
+    }
+    flush()
+    return out
+}
+
 /** Finger travel per cluster for a slow finger: the finest a drag gets. */
 const val DRAG_STEP_DP = 8f
 
@@ -111,6 +142,10 @@ class DragEdge(
  * the caller drives with [tick] every frame while [dragging]. A drag is
  * never finished early by another finger, and fingers landing while it
  * runs are ignored.
+ *
+ * A finger resting on a key with a [Key.longPress] for [holdMs], without
+ * passing the threshold, is finished there with [Gesture.Hold], also from
+ * [tick]; lifting it later does nothing more.
  */
 class Touches(
     private val thresholdPx: Float,
@@ -118,6 +153,7 @@ class Touches(
     private val flickMs: Long,
     private val flickPxPerS: Float,
     private val edge: DragEdge,
+    private val holdMs: Long,
 ) {
     /** Horizontal extent of the keyboard the finger can reach, in px. */
     private var left = Float.NEGATIVE_INFINITY
@@ -130,7 +166,7 @@ class Touches(
 
     private enum class Way { UP, DOWN, LEFT, RIGHT }
 
-    private class Touch(val id: Int, val key: Key, val x: Float, val y: Float) {
+    private class Touch(val id: Int, val key: Key, val x: Float, val y: Float, val downMs: Long) {
         /** Set once the finger passes the threshold; it does not change after. */
         var way: Way? = null
         var drag: Drag? = null
@@ -170,7 +206,10 @@ class Touches(
     /** Fingers still down, oldest first. */
     private val active = mutableListOf<Touch>()
 
-    val dragging get() = active.any { it.drag != null }
+    /** Whether [tick] has work to do: a drag running or a long press pending. */
+    val ticking get() = active.any { it.drag != null || holding(it) }
+
+    private fun holding(t: Touch) = t.key.longPress != null && t.drag == null && t.way == null
 
     /** The four-way direction of a displacement, or null below the threshold. */
     private fun way(dx: Float, dy: Float): Way? = when {
@@ -193,10 +232,10 @@ class Touches(
     }
 
     /**
-     * Finger [id] went down on [key] at ([x], [y]). [positions] holds the
-     * current position of every other finger, used to finish them.
+     * Finger [id] went down on [key] at ([x], [y]) at [timeMs]. [positions]
+     * holds the current position of every other finger, used to finish them.
      */
-    fun down(id: Int, key: Key?, x: Float, y: Float, positions: Map<Int, Point>): List<TouchEvent> {
+    fun down(id: Int, key: Key?, x: Float, y: Float, positions: Map<Int, Point>, timeMs: Long = 0): List<TouchEvent> {
         val (keep, finish) = active.partition { it.drag != null }
         val events = finish.flatMap { t ->
             val p = positions[t.id] ?: Point(t.x, t.y)
@@ -205,7 +244,7 @@ class Touches(
         active.retainAll(keep)
         // Typing during a drag would land inside its selection or recall
         // and leave the drag's offsets pointing at changed text.
-        if (key != null && keep.isEmpty()) active += Touch(id, key, x, y)
+        if (key != null && keep.isEmpty()) active += Touch(id, key, x, y, timeMs)
         return events
     }
 
@@ -259,18 +298,25 @@ class Touches(
     }
 
     /**
-     * Bring every drag up to [nowMs]: push those whose finger sits in an
-     * edge strip, and release what a drag held back once it is no flick.
+     * Bring every finger up to [nowMs]: finish long presses that are due,
+     * push drags whose finger sits in an edge strip, and release what a
+     * drag held back once it is no flick.
      */
-    fun tick(nowMs: Long): List<TouchEvent> = active.mapNotNull { t ->
-        val drag = t.drag ?: return@mapNotNull null
+    fun tick(nowMs: Long): List<TouchEvent> {
+        val held = active.filter { holding(it) && nowMs - it.downMs >= holdMs }
+        active.removeAll(held)
+        return held.map { TouchEvent.Press(it.key, Gesture.Hold) } + active.mapNotNull { t -> push(t, nowMs) }
+    }
+
+    private fun push(t: Touch, nowMs: Long): TouchEvent? {
+        val drag = t.drag ?: return null
         t.seenMs = max(t.seenMs, nowMs)
         if (t.edgeSide != 0) {
             val seconds = (nowMs - t.pushedMs) / 1000f
             t.pushedMs = nowMs
             t.carry += forward(drag, t.edgeSide * edge.speed(nowMs - t.edgeSinceMs) * seconds)
         }
-        report(t, drag)
+        return report(t, drag)
     }
 
     /** [dx] screen pixels rightwards in [drag]'s sign: a scrub grows leftwards. */

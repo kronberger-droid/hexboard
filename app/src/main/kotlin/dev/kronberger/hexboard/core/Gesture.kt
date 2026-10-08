@@ -11,10 +11,16 @@ enum class Direction { UP, UP_RIGHT, DOWN_RIGHT, DOWN, DOWN_LEFT, UP_LEFT }
 sealed interface Gesture {
     data object Tap : Gesture
     data class Swipe(val direction: Direction) : Gesture
+
+    /** A finger rested on the key for [LONG_PRESS_MS] without swiping. */
+    data object Hold : Gesture
 }
 
 /** Displacement below which a touch counts as a tap. */
 const val SWIPE_THRESHOLD_DP = 18f
+
+/** How long a finger rests on a key with a [Key.longPress] before it types that. */
+const val LONG_PRESS_MS = 350L
 
 /**
  * Classify a touch by its displacement from touch down to release, in

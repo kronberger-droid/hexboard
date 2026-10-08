@@ -9,15 +9,18 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
 import android.os.SystemClock
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import dev.kronberger.hexboard.core.Direction
 import dev.kronberger.hexboard.core.Face
+import dev.kronberger.hexboard.core.Gesture
 import dev.kronberger.hexboard.core.HexGrid
 import dev.kronberger.hexboard.core.Key
 import dev.kronberger.hexboard.core.KeyAction
 import dev.kronberger.hexboard.core.Keyboard
+import dev.kronberger.hexboard.core.LONG_PRESS_MS
 import dev.kronberger.hexboard.core.Layout
 import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
 import dev.kronberger.hexboard.core.ShiftState
@@ -37,6 +40,7 @@ import dev.kronberger.hexboard.core.DragEdge
 import dev.kronberger.hexboard.core.DragGain
 import dev.kronberger.hexboard.core.TouchEvent
 import dev.kronberger.hexboard.core.Touches
+import dev.kronberger.hexboard.core.coalesce
 import dev.kronberger.hexboard.core.keyboardHeightPx
 
 /** Draws [keyboard]'s layout as a honeycomb and reports resolved actions to [onAction]. */
@@ -56,6 +60,7 @@ class KeyboardView(
     private val lowerFill = paint(0x262626)
     private val spaceFill = paint(0x484848)
     private val enterFill = paint(0x5a5a5a)
+    private val pressedFill = paint(0x7a7a7a)
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         textAlign = Paint.Align.CENTER
@@ -83,6 +88,9 @@ class KeyboardView(
     private var grid: HexGrid? = null
     private var paths: Map<Key, Path> = emptyMap()
 
+    /** The key under each finger since it went down, lit until it lifts. */
+    private val pressed = mutableMapOf<Int, Key>()
+
     private val touches = Touches(
         swipeThreshold,
         DragGain(
@@ -95,21 +103,22 @@ class KeyboardView(
         DRAG_FLICK_MS,
         DRAG_FLICK_DP_S * density,
         DragEdge(DRAG_EDGE_DP * density, DRAG_EDGE_RATE_START, DRAG_EDGE_RATE_MAX, DRAG_EDGE_RAMP_MS),
+        LONG_PRESS_MS,
     )
 
-    /** Advances drags held in an edge strip every frame while one runs. */
+    /** Advances drags and pending long presses every frame while there are any. */
     private val ticker = object : Runnable {
         var scheduled = false
 
         override fun run() {
             scheduled = false
-            touches.tick(SystemClock.uptimeMillis()).forEach(::handle)
+            coalesce(touches.tick(SystemClock.uptimeMillis())).forEach(::handle)
             keepTicking()
         }
     }
 
     private fun keepTicking() {
-        if (touches.dragging && !ticker.scheduled) {
+        if (touches.ticking && !ticker.scheduled) {
             ticker.scheduled = true
             postOnAnimation(ticker)
         }
@@ -204,19 +213,23 @@ class KeyboardView(
     override fun onDraw(canvas: Canvas) {
         ensureBuilt()
         val g = grid ?: return
+        val lit = pressed.values.toSet()
         for (key in layout.keys) {
             val c = g.center(key.pos)
-            paths[key]?.let { path ->
-                canvas.drawPath(path, fillFor(key.face.action))
-                if (key.lower != null) {
+            // Bare keys sit on hexes half off-screen; pull their labels in.
+            val x = c.x.coerceIn(insetLeft + labelPaint.textSize, width - insetRight - labelPaint.textSize)
+            val path = paths[key]
+            if (path != null) {
+                canvas.drawPath(path, if (key in lit) pressedFill else fillFor(key.face.action))
+                if (key.lower != null && key !in lit) {
                     canvas.save()
                     canvas.clipRect(0f, c.y, width.toFloat(), height.toFloat())
                     canvas.drawPath(path, lowerFill)
                     canvas.restore()
                 }
+            } else if (key in lit) {
+                canvas.drawCircle(x, c.y, g.radius * 0.6f, pressedFill)
             }
-            // Bare keys sit on hexes half off-screen; pull their labels in.
-            val x = c.x.coerceIn(insetLeft + labelPaint.textSize, width - insetRight - labelPaint.textSize)
             if (key.lower == null) {
                 drawFace(canvas, key.face, x, c.y)
             } else {
@@ -226,6 +239,11 @@ class KeyboardView(
             for ((direction, text) in key.alternates) {
                 val (ox, oy) = HINT_OFFSETS.getValue(direction)
                 drawCentered(canvas, text, c.x + ox * g.radius * 0.62f, c.y + oy * g.radius * 0.62f, hintPaint)
+            }
+            key.longPress?.let { text ->
+                val (ox, oy) = HINT_OFFSETS.getValue(Direction.UP_RIGHT)
+                val label = keyboard.label(Face(text, KeyAction.Text(text)))
+                drawCentered(canvas, label, c.x + ox * g.radius * 0.62f, c.y + oy * g.radius * 0.62f, hintPaint)
             }
         }
     }
@@ -274,6 +292,7 @@ class KeyboardView(
         val g = grid ?: return false
         val i = event.actionIndex
         val id = event.getPointerId(i)
+        val out = mutableListOf<TouchEvent>()
         when (event.actionMasked) {
             // The key under a finger at touch down is the one that acts; the
             // release point only decides tap or swipe direction.
@@ -282,30 +301,43 @@ class KeyboardView(
                     .filter { it != i }
                     .associate { event.getPointerId(it) to Point(event.getX(it), event.getY(it)) }
                 val key = layout.keyAt(g, event.getX(i), event.getY(i))
-                touches.down(id, key, event.getX(i), event.getY(i), others).forEach(::handle)
+                if (key != null) {
+                    pressed[id] = key
+                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    invalidate()
+                }
+                out += touches.down(id, key, event.getX(i), event.getY(i), others, event.eventTime)
             }
             // Batched samples first, so drags see the finger's real speed.
             MotionEvent.ACTION_MOVE -> for (p in 0 until event.pointerCount) {
                 val pid = event.getPointerId(p)
                 for (h in 0 until event.historySize) {
-                    touches.move(pid, event.getHistoricalX(p, h), event.getHistoricalY(p, h), event.getHistoricalEventTime(h))
-                        .forEach(::handle)
+                    out += touches.move(pid, event.getHistoricalX(p, h), event.getHistoricalY(p, h), event.getHistoricalEventTime(h))
                 }
-                touches.move(pid, event.getX(p), event.getY(p), event.eventTime).forEach(::handle)
+                out += touches.move(pid, event.getX(p), event.getY(p), event.eventTime)
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
-                touches.up(id, event.getX(i), event.getY(i)).forEach(::handle)
+                if (pressed.remove(id) != null) invalidate()
+                out += touches.up(id, event.getX(i), event.getY(i))
                 if (event.actionMasked == MotionEvent.ACTION_UP) performClick()
             }
-            MotionEvent.ACTION_CANCEL -> touches.cancel().forEach(::handle)
+            MotionEvent.ACTION_CANCEL -> {
+                pressed.clear()
+                invalidate()
+                out += touches.cancel()
+            }
         }
+        coalesce(out).forEach(::handle)
         keepTicking()
         return true
     }
 
     private fun handle(e: TouchEvent) {
         when (e) {
-            is TouchEvent.Press -> keyboard.resolve(e.key, e.gesture)?.let(onAction)
+            is TouchEvent.Press -> {
+                if (e.gesture == Gesture.Hold) performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                keyboard.resolve(e.key, e.gesture)?.let(onAction)
+            }
             is TouchEvent.Act -> onAction(e.action)
         }
         invalidate()

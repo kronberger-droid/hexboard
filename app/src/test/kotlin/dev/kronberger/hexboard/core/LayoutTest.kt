@@ -81,6 +81,12 @@ class LayoutTest {
     }
 
     @Test
+    fun englishHasUmlautsOnLongPress() {
+        val longPresses = Layouts.english.keys.mapNotNull { k -> k.longPress?.let { textOf(k.face) to it } }.toMap()
+        assertEquals(mapOf("a" to "ä", "o" to "ö", "u" to "ü"), longPresses)
+    }
+
+    @Test
     fun bareKeysAreLeftOutOfFitting() {
         val layout = Layout.parse(listOf("⇧ a ⌫"), bare = setOf("⇧", "⌫"))
         assertEquals(listOf(Axial.fromRowCol(0, 1)), layout.fitCells)
