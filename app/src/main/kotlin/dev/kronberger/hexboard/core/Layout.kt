@@ -57,7 +57,8 @@ data class Face(val label: String, val action: KeyAction)
  * [alternates] is the text a swipe in each direction types instead. A key
  * with alternates reads six swipe directions and has no [sideways] drag;
  * every other key reads four, with left and right given by [sideways].
- * [longPress] is the text a finger resting on the key types instead.
+ * [longPress] is the text a finger resting on the key, or swiping it
+ * up-right, types instead.
  */
 data class Key(
     val pos: Axial,

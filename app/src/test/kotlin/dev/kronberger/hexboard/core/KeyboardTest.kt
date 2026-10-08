@@ -37,6 +37,11 @@ class KeyboardTest {
     }
 
     @Test
+    fun swipeUpRightTypesTheLongPressToo() {
+        assertEquals(text("ä"), Keyboard(layout).press(a, swipe(Direction.UP_RIGHT)))
+    }
+
+    @Test
     fun shiftedEszettStaysOneLetter() {
         val s = Layout.parse(listOf("s ⇧"), longPress = mapOf("s" to "ß"))
         val kb = Keyboard(s)

@@ -351,6 +351,20 @@ class TouchesTest {
     }
 
     @Test
+    fun longPressKeysReadUpRightBetweenUpAndRight() {
+        val t = touches()
+        t.down(0, o, 0f, 0f, emptyMap())
+        // 40° right of straight up.
+        assertEquals(none, t.move(0, 64f, -77f, timeMs = 0))
+        assertEquals(listOf(press(o, Gesture.Swipe(Direction.UP_RIGHT))), t.up(0, 64f, -77f))
+        // 20° is still up, 70° still a rightward drag.
+        t.down(1, o, 0f, 0f, emptyMap())
+        assertEquals(listOf(press(o, Gesture.Swipe(Direction.UP))), t.up(1, 21f, -56f))
+        t.down(2, o, 0f, 0f, emptyMap())
+        assertEquals(listOf(by(Drag.RECALL, 1)), t.move(2, 56f, -21f, timeMs = 0))
+    }
+
+    @Test
     fun keysWithoutALongPressNeverTick() {
         val t = touches()
         t.down(0, a, 0f, 0f, emptyMap(), timeMs = 1000)

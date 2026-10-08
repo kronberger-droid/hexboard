@@ -1,6 +1,8 @@
 package dev.kronberger.hexboard.core
 
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
@@ -164,7 +166,7 @@ class Touches(
         this.right = right
     }
 
-    private enum class Way { UP, DOWN, LEFT, RIGHT }
+    private enum class Way { UP, UP_RIGHT, DOWN, LEFT, RIGHT }
 
     private class Touch(val id: Int, val key: Key, val x: Float, val y: Float, val downMs: Long) {
         /** Set once the finger passes the threshold; it does not change after. */
@@ -212,6 +214,19 @@ class Touches(
     private fun holding(t: Touch) = t.key.longPress != null && t.drag == null && t.way == null
 
     /** The four-way direction of a displacement, or null below the threshold. */
+    /**
+     * The direction of a displacement on [key], or null below the threshold.
+     * A key with a long press also reads up-right, from 30° to 65° right of
+     * straight up, taking a slice of both up and right.
+     */
+    private fun way(key: Key, dx: Float, dy: Float): Way? {
+        if (key.longPress != null && hypot(dx, dy) >= thresholdPx) {
+            val fromUp = atan2(dx.toDouble(), -dy.toDouble()) * 180.0 / PI
+            if (fromUp >= 30.0 && fromUp < 65.0) return Way.UP_RIGHT
+        }
+        return way(dx, dy)
+    }
+
     private fun way(dx: Float, dy: Float): Way? = when {
         hypot(dx, dy) < thresholdPx -> null
         abs(dx) > abs(dy) -> if (dx < 0) Way.LEFT else Way.RIGHT
@@ -258,9 +273,9 @@ class Touches(
         t.sampled = true
         val sideways = t.key.sideways ?: return emptyList()
         if (t.way != null) return emptyList()
-        val way = way(x - t.x, y - t.y) ?: return emptyList()
+        val way = way(t.key, x - t.x, y - t.y) ?: return emptyList()
         t.way = way
-        if (way == Way.UP || way == Way.DOWN) return emptyList()
+        if (way != Way.LEFT && way != Way.RIGHT) return emptyList()
         val drag = dragFor(sideways, way)
         t.drag = drag
         // A finger that crossed the threshold in one sample is as fast as it gets.
@@ -388,9 +403,10 @@ class Touches(
         val dx = x - t.x
         val dy = y - t.y
         val sideways = t.key.sideways ?: return listOf(TouchEvent.Press(t.key, classify(dx, dy, thresholdPx)))
-        return when (val way = t.way ?: way(dx, dy)) {
+        return when (val way = t.way ?: way(t.key, dx, dy)) {
             null -> listOf(TouchEvent.Press(t.key, Gesture.Tap))
             Way.UP -> listOf(TouchEvent.Press(t.key, Gesture.Swipe(Direction.UP)))
+            Way.UP_RIGHT -> listOf(TouchEvent.Press(t.key, Gesture.Swipe(Direction.UP_RIGHT)))
             Way.DOWN -> listOf(TouchEvent.Press(t.key, Gesture.Swipe(Direction.DOWN)))
             // A flick too quick for any move event: one step, then done.
             Way.LEFT, Way.RIGHT -> {

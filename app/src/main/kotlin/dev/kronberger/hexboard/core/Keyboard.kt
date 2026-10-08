@@ -44,8 +44,8 @@ class Keyboard(private val letters: Layout, private val symbols: Layout = letter
      * Otherwise, on a split key, up picks the upper face and everything else
      * the lower one, which is the default. On a plain key, up forces a
      * capital and down forces lowercase. Any other direction falls back to a
-     * tap, so a tap that slid does not get lost. A hold types the key's
-     * long-press text, following shift like a tap.
+     * tap, so a tap that slid does not get lost. A hold, or a swipe up-right,
+     * types the key's long-press text, following shift like a tap.
      */
     fun resolve(key: Key, gesture: Gesture): KeyAction? = when (val action = action(key, gesture)) {
         KeyAction.Shift -> {
@@ -70,6 +70,7 @@ class Keyboard(private val letters: Layout, private val symbols: Layout = letter
         if (gesture == Gesture.Hold) key.longPress?.let { return typed(KeyAction.Text(cased(it, shift != ShiftState.OFF))) }
         val direction = (gesture as? Gesture.Swipe)?.direction
         direction?.let { key.alternates[it] }?.let { return typed(KeyAction.Text(it)) }
+        if (direction == Direction.UP_RIGHT) key.longPress?.let { return typed(KeyAction.Text(cased(it, shift != ShiftState.OFF))) }
 
         if (key.lower != null) {
             val picked = if (direction == Direction.UP) face else key.lower
