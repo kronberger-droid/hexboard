@@ -29,15 +29,15 @@ Things noticed along the way that belong to no phase yet. Take them up
 when Martin asks, or fold them into Phase 8 where they fit.
 
 - **Drag tuning.** `SWIPE_THRESHOLD_DP` in `core/Gesture.kt`, and
-  `DRAG_DEAD_DP`, `DRAG_RATE_PER_DP`, `DRAG_RATE_MAX` in `core/Touches.kt`.
-  Martin expects to tune these; a settings screen (Phase 8) could expose
-  them.
-- **Selection toolbar** after a left-space drag uses a `SelectRangeGesture`
+  `DRAG_STEP_DP`, `DRAG_FINE_STEPS`, `DRAG_RAMP_DP`, `DRAG_RATE_MAX` in
+  `core/Touches.kt`. Martin expects to tune these; a settings screen
+  (Phase 8) could expose them.
+- **Selection toolbar** after an enter drag uses a `SelectRangeGesture`
   (API 34+). Unverified in Chrome and Compose text fields; if it fails
   there, the fallback is an in-keyboard cut/copy/paste bar through
   `performContextMenuAction`.
 - **Drag reach** is 2000 chars either way (`WINDOW` in the service).
-- **Drag interplay untested:** a scrub started over a left-space selection
+- **Drag interplay untested:** a scrub started over an enter-drag selection
   ignores it; recall refuses while a selection exists.
 - **Composing-text recall preview** not yet tried in a browser or Termux.
 - **Symbols:** Typewise's second symbols page (`¥?±` on its function key)
@@ -94,12 +94,14 @@ when Martin asks, or fold them into Phase 8 where they fit.
   the last deletion back cluster by cluster as composing text; release
   keeps it, and what was not brought back stays recallable. The buffer is
   invalidated in `onUpdateSelection` when the cursor moves elsewhere.
-- Sideways drags are speed controlled: the first step comes as the drag
-  starts, then speed follows the finger's distance from where it went down
-  (`DragRate`), reversing past that point. Reach is 2000 chars either way
-  of where the drag started (`WINDOW` in the service), not a screen width.
-- The spaces drag too: the left one extends a selection from the cursor,
-  the right one moves the cursor (`␣:select`, `␣:move` in the layout).
+- Sideways drags follow `DragCurve`: the first step comes as the drag
+  starts, the next few follow the finger's position one per few dp, and
+  beyond those speed grows with the finger's distance from where it went
+  down, reversing past that point. Reach is 2000 chars either way of where
+  the drag started (`WINDOW` in the service), not a screen width.
+- The left space moves the cursor and enter extends a selection from it
+  (`␣:move`, `⏎:select` in the layout). The right space scrubs like the
+  letters, so a backspace drag that lands on it still deletes.
 - `core/Touches` finishes every finger already down when a new one lands
   (Phase 4). A drag is long, so it is exempt from that.
 - **Done when:** scrub and recall work in a normal app. Then try a browser

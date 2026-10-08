@@ -22,10 +22,11 @@ import dev.kronberger.hexboard.core.Layout
 import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
 import dev.kronberger.hexboard.core.ShiftState
 import dev.kronberger.hexboard.core.Point
-import dev.kronberger.hexboard.core.DRAG_DEAD_DP
+import dev.kronberger.hexboard.core.DRAG_FINE_STEPS
+import dev.kronberger.hexboard.core.DRAG_RAMP_DP
 import dev.kronberger.hexboard.core.DRAG_RATE_MAX
-import dev.kronberger.hexboard.core.DRAG_RATE_PER_DP
-import dev.kronberger.hexboard.core.DragRate
+import dev.kronberger.hexboard.core.DRAG_STEP_DP
+import dev.kronberger.hexboard.core.DragCurve
 import dev.kronberger.hexboard.core.TouchEvent
 import dev.kronberger.hexboard.core.Touches
 import dev.kronberger.hexboard.core.keyboardHeightPx
@@ -76,7 +77,7 @@ class KeyboardView(
 
     private val touches = Touches(
         swipeThreshold,
-        DragRate(DRAG_DEAD_DP * density, DRAG_RATE_PER_DP / density, DRAG_RATE_MAX),
+        DragCurve(DRAG_STEP_DP * density, DRAG_FINE_STEPS, DRAG_RAMP_DP * density, DRAG_RATE_MAX),
     )
 
     /** Advances drags every frame for as long as one is running. */
