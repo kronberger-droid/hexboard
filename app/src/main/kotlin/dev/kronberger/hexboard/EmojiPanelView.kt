@@ -19,6 +19,7 @@ import dev.kronberger.hexboard.core.Recents
 import dev.kronberger.hexboard.core.SKIN_TONES
 import dev.kronberger.hexboard.core.Settings
 import dev.kronberger.hexboard.core.withTone
+import dev.kronberger.hexboard.core.withoutTone
 import kotlin.math.abs
 
 /**
@@ -218,7 +219,7 @@ class EmojiPanelView(
         if (dragging || downY !in gridTop..gridBottom) return
         val row = ((downY - gridTop + offset) / rowHeight).toInt()
         val col = ((downX - contentLeft) / rowHeight).toInt()
-        val e = grid.at(row, col) ?: return
+        val e = withoutTone(grid.at(row, col) ?: return)
         val tones = SKIN_TONES.map { withTone(e, it) }.filter(emojiPaint::hasGlyph)
         if (tones.isEmpty()) return
         val top = gridTop + row * rowHeight - offset

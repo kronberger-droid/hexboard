@@ -411,7 +411,7 @@ class HexboardService : InputMethodService() {
     private fun travelBy(ic: InputConnection, drag: Drag, delta: Int) {
         val t = travel ?: startTravel(ic, drag) ?: return goBlind(ic, drag, delta)
         var focus = t.step(t.focus, delta)
-        if (focus == t.start && delta < 0 && t.moreBefore || focus == t.end && delta > 0 && t.moreAfter) {
+        if ((focus == t.start && delta < 0 && t.moreBefore) || (focus == t.end && delta > 0 && t.moreAfter)) {
             reachFurther(ic, t, drag, delta < 0)
             focus = t.step(t.focus, delta)
         }

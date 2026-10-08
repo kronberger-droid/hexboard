@@ -86,4 +86,11 @@ class EmojiTest {
         assertEquals("🧔🏻\u200D♂️", withTone("🧔\u200D♂️", light))
         assertEquals("👨🏿\u200D🦰", withTone("👨\u200D🦰", SKIN_TONES.last()))
     }
+
+    @Test
+    fun toneComesOutAgain() {
+        assertEquals("👋", withoutTone("👋🏽"))
+        assertEquals("👨\u200D🦰", withoutTone("👨🏿\u200D🦰"))
+        assertEquals("😀", withoutTone("😀"))
+    }
 }

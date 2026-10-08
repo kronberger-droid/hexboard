@@ -76,3 +76,6 @@ fun withTone(emoji: String, tone: String): String {
     val rest = emoji.substring(first).removePrefix("\uFE0F")
     return emoji.substring(0, first) + tone + rest
 }
+
+/** [emoji] with any skin tone taken out, e.g. a toned one from the recents. */
+fun withoutTone(emoji: String): String = SKIN_TONES.fold(emoji) { e, tone -> e.replace(tone, "") }
