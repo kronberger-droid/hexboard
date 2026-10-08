@@ -38,7 +38,6 @@ when Martin asks, or fold them into Phase 8 where they fit.
   (API 34+). Unverified in Chrome and Compose text fields; if it fails
   there, the fallback is an in-keyboard cut/copy/paste bar through
   `performContextMenuAction`.
-- **Drag reach** is 2000 chars either way (`WINDOW` in the service).
 - **Drag interplay untested:** a scrub started over an enter-drag selection
   ignores it; recall refuses while a selection exists.
 - **Composing-text recall preview** not yet tried in a browser or Termux.
@@ -100,9 +99,10 @@ when Martin asks, or fold them into Phase 8 where they fit.
   the first step comes as the drag starts. A drag lifted within
   `DRAG_FLICK_MS` is a flick and keeps only that step; fast moves until
   then are held back, so a flick shows no selection.
-  Otherwise the drag moves only while the finger does, one cluster per few dp when slow and many per dp when
-  fast. Reach is 2000 chars either way of where the drag started
-  (`WINDOW` in the service). Past what the finger can cover, holding it
+  Otherwise the drag moves only while the finger does, one cluster per
+  few dp when slow and many per dp when fast. Text is fetched 2000 chars
+  at a time (`WINDOW` in the service), and more as a drag reaches the end
+  of what it has. Past what the finger can cover, holding it
   in the strip at the keyboard's edge keeps the drag going like key
   repeat, faster the longer it stays (`DragEdge`).
 - The left space moves the cursor and enter extends a selection from it

@@ -35,9 +35,13 @@ class HexboardService : InputMethodService() {
     private val cursor = Cursor()
     private val recall = Recall()
 
-    /** A scrub in progress: where it started, the text it can reach, how much is selected. */
-    private class Scrub(val cursor: Int, val before: String, val boundaries: List<Int>) {
+    /**
+     * A scrub in progress: where it started, the text it can reach so far,
+     * how much is selected, and whether the editor has more text before it.
+     */
+    private class Scrub(val cursor: Int, var before: String, var boundaries: List<Int>) {
         var steps = 0
+        var more = before.length >= WINDOW
     }
 
     /** A recall drag in progress: where it inserts, the run, how much is shown. */
@@ -47,10 +51,15 @@ class HexboardService : InputMethodService() {
 
     /**
      * Text around the selection at the start of a cursor or selection drag,
-     * with cluster boundaries in editor offsets. [anchor] stays put while
-     * [focus] moves; for a cursor drag they are the same.
+     * from editor offset [start], with its cluster boundaries. [anchor] stays
+     * put while [focus] moves; for a cursor drag they are the same. The
+     * editor may hold more text on either side, fetched as the drag gets there.
      */
-    private class Travel(val start: Int, val boundaries: List<Int>, var anchor: Int, var focus: Int) {
+    private class Travel(var start: Int, var text: String, var boundaries: List<Int>, var anchor: Int, var focus: Int) {
+        var moreBefore = false
+        var moreAfter = false
+        val end get() = start + text.length
+
         fun step(from: Int, n: Int) = start + stepClusters(boundaries, from - start, n)
     }
 
@@ -289,6 +298,7 @@ class HexboardService : InputMethodService() {
 
     private fun scrubBy(ic: InputConnection, delta: Int) {
         val s = scrub ?: startScrub(ic) ?: return goBlind(ic, Drag.SCRUB, delta)
+        if (s.more && s.steps + delta > s.boundaries.size - 1) reachFurther(ic, s)
         // Clamped here, so turning back reacts at once however long the
         // finger was held past the start of the text.
         s.steps = (s.steps + delta).coerceIn(0, s.boundaries.size - 1)
@@ -319,6 +329,22 @@ class HexboardService : InputMethodService() {
         ic.endBatchEdit()
         cursor.movedBySelf(start)
         recall.record(s.before.substring(s.before.length - (s.cursor - start)), s.cursor, start)
+    }
+
+    /**
+     * Fetch the text before what [s] can reach. The editor answers relative
+     * to the selection, so that is first stretched to where the scrub is
+     * heading anyway.
+     */
+    private fun reachFurther(ic: InputConnection, s: Scrub) {
+        val from = s.cursor - s.before.length
+        ic.setSelection(from, s.cursor)
+        cursor.movedBySelf(from, s.cursor)
+        val more = ic.getTextBeforeCursor(WINDOW, 0)?.toString().orEmpty()
+        s.more = more.length >= WINDOW
+        if (more.isEmpty()) return
+        s.before = more + s.before
+        s.boundaries = boundaries(s.before)
     }
 
     /** Absolute editor offset where the scrub's selection starts. */
@@ -384,11 +410,39 @@ class HexboardService : InputMethodService() {
     /** Move the cursor, or the selection's moving end, by [delta] clusters. */
     private fun travelBy(ic: InputConnection, drag: Drag, delta: Int) {
         val t = travel ?: startTravel(ic, drag) ?: return goBlind(ic, drag, delta)
-        t.focus = t.step(t.focus, delta)
+        var focus = t.step(t.focus, delta)
+        if (focus == t.start && delta < 0 && t.moreBefore || focus == t.end && delta > 0 && t.moreAfter) {
+            reachFurther(ic, t, drag, delta < 0)
+            focus = t.step(t.focus, delta)
+        }
+        t.focus = focus
         if (drag == Drag.MOVE) t.anchor = t.focus
         val (start, end) = minOf(t.anchor, t.focus) to maxOf(t.anchor, t.focus)
         ic.setSelection(start, end)
         cursor.movedBySelf(start, end)
+    }
+
+    /**
+     * Fetch the text past one end of what [t] can reach, [left] or right.
+     * The editor answers relative to the selection, so that is first moved
+     * to that end, where the drag is heading anyway.
+     */
+    private fun reachFurther(ic: InputConnection, t: Travel, drag: Drag, left: Boolean) {
+        val edge = if (left) t.start else t.end
+        val (a, b) = if (drag == Drag.SELECT) minOf(t.anchor, edge) to maxOf(t.anchor, edge) else edge to edge
+        ic.setSelection(a, b)
+        cursor.movedBySelf(a, b)
+        if (left) {
+            val more = ic.getTextBeforeCursor(WINDOW, 0)?.toString().orEmpty()
+            t.moreBefore = more.length >= WINDOW
+            t.text = more + t.text
+            t.start -= more.length
+        } else {
+            val more = ic.getTextAfterCursor(WINDOW, 0)?.toString().orEmpty()
+            t.moreAfter = more.length >= WINDOW
+            t.text += more
+        }
+        t.boundaries = boundaries(t.text)
     }
 
     private fun startTravel(ic: InputConnection, drag: Drag): Travel? {
@@ -402,7 +456,12 @@ class HexboardService : InputMethodService() {
         // drag starts from that end, collapsed.
         val (anchor, focus) = if (drag == Drag.SELECT) cursor.start to cursor.end else cursor.end to cursor.end
         val start = cursor.start - before.length
-        return Travel(start, boundaries(before + selected + after), anchor, focus).also { travel = it }
+        val text = before + selected + after
+        return Travel(start, text, boundaries(text), anchor, focus).also {
+            it.moreBefore = before.length >= WINDOW
+            it.moreAfter = after.length >= WINDOW
+            travel = it
+        }
     }
 
     /**
@@ -459,7 +518,7 @@ class HexboardService : InputMethodService() {
             InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
         )
 
-        /** How far one drag can reach on either side of where it started. */
+        /** How much text a drag fetches at a time on either side of where it is. */
         const val WINDOW = 2000
     }
 }
