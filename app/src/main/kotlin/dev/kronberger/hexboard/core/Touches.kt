@@ -12,16 +12,19 @@ sealed interface TouchEvent {
 }
 
 /** Finger travel per cluster for a slow finger: the finest a drag gets. */
-const val DRAG_STEP_DP = 7f
+const val DRAG_STEP_DP = 8f
 
 /** Finger speed up to which a drag keeps its finest step. */
-const val DRAG_SLOW_DP_S = 150f
+const val DRAG_SLOW_DP_S = 250f
 
 /** Finger speed at which a drag reaches [DRAG_GAIN_MAX]. */
-const val DRAG_FAST_DP_S = 1500f
+const val DRAG_FAST_DP_S = 2500f
 
 /** How many times more clusters a fast finger covers than a slow one, per dp. */
-const val DRAG_GAIN_MAX = 16f
+const val DRAG_GAIN_MAX = 8f
+
+/** A drag lifted this soon after it started was a flick and moves one cluster. */
+const val DRAG_FLICK_MS = 150L
 
 /** Time constant of the finger speed estimate, which irons out sample jitter. */
 const val DRAG_SMOOTH_MS = 30f
@@ -61,14 +64,16 @@ class DragGain(
  * its [Sideways] drag. Which of the four is fixed when the finger first
  * passes the threshold, so an up swipe that drifts left stays up.
  *
- * A sideways drag moves one cluster as it starts, so a quick flick moves
- * exactly one. From there it moves only while the finger does, by [gain]
- * for the finger's speed: slow for fine work, fast to cover distance.
+ * A sideways drag moves one cluster as it starts. Whatever follows in the
+ * first [flickMs] is held back and dropped if the finger lifts by then,
+ * so a quick flick moves exactly one. From there the drag moves only
+ * while the finger does, by [gain] for the finger's speed: slow for fine
+ * work, fast to cover distance.
  * Moving back at the same speed undoes the same amount. A drag is never
  * finished early by another finger, and fingers landing while it runs are
  * ignored.
  */
-class Touches(private val thresholdPx: Float, private val gain: DragGain) {
+class Touches(private val thresholdPx: Float, private val gain: DragGain, private val flickMs: Long) {
 
     private enum class Way { UP, DOWN, LEFT, RIGHT }
 
@@ -78,6 +83,10 @@ class Touches(private val thresholdPx: Float, private val gain: DragGain) {
         var drag: Drag? = null
         var lastX = x
         var lastMs = 0L
+        var startMs = 0L
+
+        /** Clusters moved during the flick window, not yet reported. */
+        var held = 0
 
         /** Smoothed finger speed in px/s while dragging. */
         var speed = 0f
@@ -139,6 +148,7 @@ class Touches(private val thresholdPx: Float, private val gain: DragGain) {
         t.drag = drag
         t.lastX = x
         t.lastMs = timeMs
+        t.startMs = timeMs
         return listOf(TouchEvent.Act(KeyAction.DragBy(drag, firstStep(drag, way))))
     }
 
@@ -158,10 +168,15 @@ class Touches(private val thresholdPx: Float, private val gain: DragGain) {
         // Rounding keeps the remainder within half a cluster, so jitter
         // smaller than a step never flips the cursor back and forth.
         val whole = t.carry.roundToInt()
-        if (whole == 0) return null
         t.carry -= whole
-        return TouchEvent.Act(KeyAction.DragBy(drag, whole))
+        t.held += whole
+        if (flicking(t) || t.held == 0) return null
+        val delta = t.held
+        t.held = 0
+        return TouchEvent.Act(KeyAction.DragBy(drag, delta))
     }
+
+    private fun flicking(t: Touch) = t.lastMs - t.startMs < flickMs
 
     /** Finger [id] lifted at ([x], [y]); empty if it was already finished. */
     fun up(id: Int, x: Float, y: Float): List<TouchEvent> {
@@ -179,8 +194,10 @@ class Touches(private val thresholdPx: Float, private val gain: DragGain) {
 
     private fun finished(t: Touch, x: Float, y: Float): List<TouchEvent> {
         t.drag?.let { drag ->
-            // Land where the finger lifted, even if no move event got there.
-            return listOfNotNull(glide(t, x, t.lastMs), TouchEvent.Act(KeyAction.DragEnd(drag)))
+            // Land where the finger lifted, even if no move event got there,
+            // unless the whole drag was a flick.
+            val last = if (flicking(t)) null else glide(t, x, t.lastMs)
+            return listOfNotNull(last, TouchEvent.Act(KeyAction.DragEnd(drag)))
         }
         val dx = x - t.x
         val dy = y - t.y

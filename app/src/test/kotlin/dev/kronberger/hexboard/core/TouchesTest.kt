@@ -23,7 +23,7 @@ class TouchesTest {
     // up to eleven times that at 1100px/s. No smoothing, so each move's
     // speed is exactly its own.
     private val gain = DragGain(stepPx = 10f, slowPxPerS = 100f, fastPxPerS = 1100f, maxGain = 11f, smoothMs = 0f)
-    private fun touches() = Touches(thresholdPx = 50f, gain = gain)
+    private fun touches(flickMs: Long = 0) = Touches(thresholdPx = 50f, gain = gain, flickMs = flickMs)
 
     private fun press(key: Key, g: Gesture = tap) = TouchEvent.Press(key, g)
     private fun by(drag: Drag, delta: Int) = TouchEvent.Act(KeyAction.DragBy(drag, delta))
@@ -115,6 +115,25 @@ class TouchesTest {
             val x = if (i % 2 == 1) 441f else 445f
             assertEquals(none, t.move(0, x, 0f, timeMs = i * 100L))
         }
+    }
+
+    @Test
+    fun fastFlickLiftedInsideTheWindowMovesExactlyOne() {
+        val t = touches(flickMs = 150)
+        t.down(0, a, 500f, 0f, emptyMap())
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 445f, 0f, timeMs = 0))
+        assertEquals(none, t.move(0, 345f, 0f, timeMs = 50))
+        assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 300f, 0f))
+    }
+
+    @Test
+    fun dragOutlastingTheFlickWindowCatchesUp() {
+        val t = touches(flickMs = 150)
+        t.down(0, a, 500f, 0f, emptyMap())
+        t.move(0, 445f, 0f, timeMs = 0)
+        assertEquals(none, t.move(0, 345f, 0f, timeMs = 50))
+        assertEquals(listOf(by(Drag.SCRUB, 111)), t.move(0, 335f, 0f, timeMs = 150))
+        assertEquals(listOf(by(Drag.SCRUB, 1), end(Drag.SCRUB)), t.up(0, 325f, 0f))
     }
 
     @Test

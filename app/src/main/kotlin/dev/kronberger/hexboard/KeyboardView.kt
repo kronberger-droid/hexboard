@@ -22,6 +22,7 @@ import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
 import dev.kronberger.hexboard.core.ShiftState
 import dev.kronberger.hexboard.core.Point
 import dev.kronberger.hexboard.core.DRAG_FAST_DP_S
+import dev.kronberger.hexboard.core.DRAG_FLICK_MS
 import dev.kronberger.hexboard.core.DRAG_GAIN_MAX
 import dev.kronberger.hexboard.core.DRAG_SLOW_DP_S
 import dev.kronberger.hexboard.core.DRAG_SMOOTH_MS
@@ -84,6 +85,7 @@ class KeyboardView(
             DRAG_GAIN_MAX,
             DRAG_SMOOTH_MS,
         ),
+        DRAG_FLICK_MS,
     )
 
     init {

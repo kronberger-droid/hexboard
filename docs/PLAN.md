@@ -30,7 +30,7 @@ when Martin asks, or fold them into Phase 8 where they fit.
 
 - **Drag tuning.** `SWIPE_THRESHOLD_DP` in `core/Gesture.kt`, and
   `DRAG_STEP_DP`, `DRAG_SLOW_DP_S`, `DRAG_FAST_DP_S`, `DRAG_GAIN_MAX`,
-  `DRAG_SMOOTH_MS` in `core/Touches.kt`. Martin expects to tune these; a settings screen
+  `DRAG_SMOOTH_MS`, `DRAG_FLICK_MS` in `core/Touches.kt`. Martin expects to tune these; a settings screen
   (Phase 8) could expose them.
 - **Selection toolbar** after an enter drag uses a `SelectRangeGesture`
   (API 34+). Unverified in Chrome and Compose text fields; if it fails
@@ -95,8 +95,9 @@ when Martin asks, or fold them into Phase 8 where they fit.
   keeps it, and what was not brought back stays recallable. The buffer is
   invalidated in `onUpdateSelection` when the cursor moves elsewhere.
 - Sideways drags work like trackpad pointer acceleration (`DragGain`):
-  the first step comes as the drag starts, then the drag moves only while
-  the finger does, one cluster per few dp when slow and many per dp when
+  the first step comes as the drag starts, a drag lifted within
+  `DRAG_FLICK_MS` stops there, and otherwise it moves only while the
+  finger does, one cluster per few dp when slow and many per dp when
   fast. Reach is 2000 chars either way of where the drag started
   (`WINDOW` in the service); past what one swipe covers, lift and drag
   again.
