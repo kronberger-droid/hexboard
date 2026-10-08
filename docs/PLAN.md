@@ -43,8 +43,8 @@ when Martin asks, or fold them into Phase 8 where they fit.
 - **Composing-text recall preview** not yet tried in a browser or Termux.
 - **Symbols:** Typewise's second symbols page (`¥?±` on its function key)
   is not built; the mark on `=/+` in its screenshot was unreadable.
-- **Emoji:** no skin tones (natural follow-up: long-press popup); the
-  Recent tab only appears after the first pick, shifting the other tabs.
+- **Emoji:** the Recent tab only appears after the first pick, shifting
+  the other tabs.
 
 ## Phase 0: Toolchain on NixOS
 

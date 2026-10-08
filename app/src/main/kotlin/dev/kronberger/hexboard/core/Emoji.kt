@@ -61,3 +61,18 @@ class EmojiGrid(val sections: List<EmojiGroup>, val columns: Int) {
     /** The emoji at [row], [column], or null for headers and empty cells. */
     fun at(row: Int, column: Int): String? = (rows.getOrNull(row) as? Row.Emojis)?.emoji?.getOrNull(column)
 }
+
+/** The five Fitzpatrick skin tone modifiers, light to dark. */
+val SKIN_TONES: List<String> = (0x1F3FB..0x1F3FF).map { String(Character.toChars(it)) }
+
+/**
+ * [emoji] in skin [tone]: the modifier goes right after the first code
+ * point, replacing a variation selector there, which is where Unicode puts
+ * it for single people and for the first person of a ZWJ sequence. Whether
+ * the result is a real emoji is for the font to say.
+ */
+fun withTone(emoji: String, tone: String): String {
+    val first = Character.charCount(emoji.codePointAt(0))
+    val rest = emoji.substring(first).removePrefix("\uFE0F")
+    return emoji.substring(0, first) + tone + rest
+}

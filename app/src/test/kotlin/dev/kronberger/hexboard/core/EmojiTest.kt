@@ -77,4 +77,13 @@ class EmojiTest {
         assertNull(grid.at(2, 1))
         assertNull(grid.at(9, 0))
     }
+
+    @Test
+    fun toneGoesAfterTheFirstCodePointAndReplacesAVariationSelector() {
+        val light = SKIN_TONES.first()
+        assertEquals("👋🏻", withTone("👋", light))
+        assertEquals("✌🏻", withTone("✌️", light))
+        assertEquals("🧔🏻\u200D♂️", withTone("🧔\u200D♂️", light))
+        assertEquals("👨🏿\u200D🦰", withTone("👨\u200D🦰", SKIN_TONES.last()))
+    }
 }

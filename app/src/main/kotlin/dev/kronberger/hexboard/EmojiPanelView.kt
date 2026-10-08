@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
@@ -15,12 +16,16 @@ import dev.kronberger.hexboard.core.EmojiGrid
 import dev.kronberger.hexboard.core.EmojiGroup
 import dev.kronberger.hexboard.core.KeyAction
 import dev.kronberger.hexboard.core.Recents
+import dev.kronberger.hexboard.core.SKIN_TONES
+import dev.kronberger.hexboard.core.Settings
+import dev.kronberger.hexboard.core.withTone
 import kotlin.math.abs
 
 /**
  * The emoji panel, swapped in for the keys at their height ([sizeLike]).
  * Group tabs on top, a scrolling grid with the recently used emoji first,
  * and a bottom row to go back to the letters, type a space, or delete.
+ * A long press on an emoji with skin tones offers them in a row above it.
  */
 class EmojiPanelView(
     context: Context,
@@ -58,6 +63,22 @@ class EmojiPanelView(
     private val barFill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val spaceFill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val accent = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val pressedFill = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    private var haptics = true
+    private var longPressMs = 0L
+
+    /**
+     * Skin tones offered for a long-pressed emoji: [options] in a row above
+     * the cell centered at [x] whose top is at [top]; [selected] follows the
+     * finger.
+     */
+    private class TonePicker(val options: List<String>, val x: Float, val top: Float) {
+        var selected = 0
+    }
+
+    private var picker: TonePicker? = null
+    private val openPicker = Runnable { openPicker() }
 
     init {
         applyPalette(Palette.DARK)
@@ -69,6 +90,7 @@ class EmojiPanelView(
         barFill.color = p.key
         spaceFill.color = p.space
         accent.color = p.hint
+        pressedFill.color = p.pressed
         setBackgroundColor(p.background)
         invalidate()
     }
@@ -86,6 +108,9 @@ class EmojiPanelView(
 
     /** Called when the panel is shown: picks up recents and starts at the top. */
     fun refresh() {
+        val settings = Prefs(prefs)
+        haptics = settings[Settings.haptics]
+        longPressMs = settings[Settings.longPress].toLong()
         grid = buildGrid()
         scroller.forceFinished(true)
         offset = 0f
@@ -162,6 +187,52 @@ class EmojiPanelView(
         val mid = (top + bottom) / 2
         canvas.drawText("ABC", back.centerX(), baseline(mid, labelPaint), labelPaint)
         canvas.drawText("⌫", delete.centerX(), baseline(mid, labelPaint), labelPaint)
+
+        picker?.let { drawPicker(canvas, it) }
+    }
+
+    /** Where [p]'s row of cells sits: its left edge and cell size, kept on screen. */
+    private fun pickerGeometry(p: TonePicker): Pair<Float, Float> {
+        val cell = rowHeight
+        val w = cell * p.options.size
+        val left = (p.x - w / 2).coerceIn(contentLeft, (contentLeft + contentWidth - w).coerceAtLeast(contentLeft))
+        return left to cell
+    }
+
+    private fun drawPicker(canvas: Canvas, p: TonePicker) {
+        val (left, cell) = pickerGeometry(p)
+        val top = (p.top - cell).coerceAtLeast(0f)
+        val radius = 8f * density
+        canvas.drawRoundRect(RectF(left, top, left + cell * p.options.size, top + cell), radius, radius, barFill)
+        canvas.drawRoundRect(
+            RectF(left + p.selected * cell, top, left + (p.selected + 1) * cell, top + cell), radius, radius, pressedFill,
+        )
+        emojiPaint.textSize = cell * 0.62f
+        p.options.forEachIndexed { i, e ->
+            canvas.drawText(e, left + (i + 0.5f) * cell, baseline(top + cell / 2, emojiPaint), emojiPaint)
+        }
+    }
+
+    /** The emoji under the touch-down point, if it has skin tones this font draws, offers them. */
+    private fun openPicker() {
+        if (dragging || downY !in gridTop..gridBottom) return
+        val row = ((downY - gridTop + offset) / rowHeight).toInt()
+        val col = ((downX - contentLeft) / rowHeight).toInt()
+        val e = grid.at(row, col) ?: return
+        val tones = SKIN_TONES.map { withTone(e, it) }.filter(emojiPaint::hasGlyph)
+        if (tones.isEmpty()) return
+        val top = gridTop + row * rowHeight - offset
+        picker = TonePicker(listOf(e) + tones, contentLeft + (col + 0.5f) * rowHeight, top)
+        if (haptics) performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        invalidate()
+    }
+
+    private fun pick(e: String) {
+        onAction(KeyAction.Text(e))
+        // Saved now, shown next time the panel opens, so the grid
+        // does not shift under the finger.
+        recents.used(e)
+        prefs.edit().putString(RECENTS_KEY, recents.serialize()).apply()
     }
 
     /** Horizontal extents of the bottom row's three buttons, with gaps. */
@@ -196,15 +267,36 @@ class EmojiPanelView(
                 dragging = false
                 velocity?.recycle()
                 velocity = VelocityTracker.obtain().also { it.addMovement(event) }
+                if (haptics) performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                if (event.y in gridTop..gridBottom) postDelayed(openPicker, longPressMs)
             }
             MotionEvent.ACTION_MOVE -> {
+                picker?.let { p ->
+                    val (left, cell) = pickerGeometry(p)
+                    val i = ((event.x - left) / cell).toInt().coerceIn(0, p.options.size - 1)
+                    if (i != p.selected) {
+                        p.selected = i
+                        invalidate()
+                    }
+                    return true
+                }
                 velocity?.addMovement(event)
                 val inGrid = downY in gridTop..gridBottom
-                if (inGrid && !dragging && abs(event.y - downY) > touchSlop) dragging = true
+                if (inGrid && !dragging && abs(event.y - downY) > touchSlop) {
+                    dragging = true
+                    removeCallbacks(openPicker)
+                }
                 if (dragging) scrollTo(offset - (event.y - lastY))
                 lastY = event.y
             }
             MotionEvent.ACTION_UP -> {
+                removeCallbacks(openPicker)
+                picker?.let { p ->
+                    picker = null
+                    pick(p.options[p.selected])
+                    invalidate()
+                    return true
+                }
                 velocity?.addMovement(event)
                 if (dragging) {
                     velocity?.computeCurrentVelocity(1000)
@@ -219,6 +311,9 @@ class EmojiPanelView(
                 velocity = null
             }
             MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(openPicker)
+                picker = null
+                invalidate()
                 velocity?.recycle()
                 velocity = null
             }
@@ -237,12 +332,7 @@ class EmojiPanelView(
             y < gridBottom -> {
                 val row = ((y - gridTop + offset) / rowHeight).toInt()
                 val col = ((x - contentLeft) / rowHeight).toInt()
-                val e = grid.at(row, col) ?: return
-                onAction(KeyAction.Text(e))
-                // Saved now, shown next time the panel opens, so the grid
-                // does not shift under the finger.
-                recents.used(e)
-                prefs.edit().putString(RECENTS_KEY, recents.serialize()).apply()
+                pick(grid.at(row, col) ?: return)
             }
             y < height - insetBottom -> {
                 val (back, space, _) = barSlots()
