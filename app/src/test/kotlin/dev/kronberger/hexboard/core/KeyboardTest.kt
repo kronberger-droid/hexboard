@@ -37,6 +37,14 @@ class KeyboardTest {
     }
 
     @Test
+    fun shiftedEszettStaysOneLetter() {
+        val s = Layout.parse(listOf("s ⇧"), longPress = mapOf("s" to "ß"))
+        val kb = Keyboard(s)
+        kb.press(s.keys[1])
+        assertEquals(text("ß"), kb.press(s.keys[0], Gesture.Hold))
+    }
+
+    @Test
     fun holdOnAKeyWithoutALongPressIsATap() {
         assertEquals(KeyAction.Space, Keyboard(layout).press(space, Gesture.Hold))
     }

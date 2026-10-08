@@ -171,7 +171,7 @@ object Layouts {
      * `f h` in the middle row; shift and delete hang off the screen edges
      * beside them. Dragging the left space moves the cursor and dragging
      * enter selects; the right space scrubs and recalls like the letters.
-     * A long press on `a o u` gives the German umlauts.
+     * A long press on `a o u s` gives the German umlauts and `ß`.
      */
     val english = Layout.parse(
         listOf(
@@ -183,7 +183,7 @@ object Layouts {
         ),
         bare = setOf("⇧", "⌫"),
         alternates = punctuation,
-        longPress = mapOf("a" to "ä", "o" to "ö", "u" to "ü"),
+        longPress = mapOf("a" to "ä", "o" to "ö", "u" to "ü", "s" to "ß"),
     )
 
     /**

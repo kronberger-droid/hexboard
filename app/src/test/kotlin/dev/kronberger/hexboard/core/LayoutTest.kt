@@ -81,9 +81,9 @@ class LayoutTest {
     }
 
     @Test
-    fun englishHasUmlautsOnLongPress() {
+    fun englishHasUmlautsAndEszettOnLongPress() {
         val longPresses = Layouts.english.keys.mapNotNull { k -> k.longPress?.let { textOf(k.face) to it } }.toMap()
-        assertEquals(mapOf("a" to "ä", "o" to "ö", "u" to "ü"), longPresses)
+        assertEquals(mapOf("a" to "ä", "o" to "ö", "u" to "ü", "s" to "ß"), longPresses)
     }
 
     @Test

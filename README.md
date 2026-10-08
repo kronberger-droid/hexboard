@@ -7,7 +7,7 @@ libraries.
 - Honeycomb layout with two space keys in the middle and split keys for
   paired punctuation.
 - Swipe up for capitals, down for lowercase; shift and caps lock.
-- Long-press `a o u` for `ä ö ü`.
+- Long-press `a o u s` for `ä ö ü ß`.
 - Drag left on almost any key to select backwards and delete, right to
   bring the deletion back. Drags accelerate like a trackpad pointer: slow
   for single characters, fast to cover distance.

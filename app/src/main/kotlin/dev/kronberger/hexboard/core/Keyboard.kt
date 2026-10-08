@@ -65,12 +65,13 @@ class Keyboard(private val letters: Layout, private val symbols: Layout = letter
         return typed(KeyAction.Text(cased(action.text, upper)))
     }
 
-    private fun cased(text: String, upper: Boolean) = if (upper) text.uppercase() else text
+    /** Character by character, so `ß` stays one letter rather than becoming `SS`. */
+    private fun cased(text: String, upper: Boolean) = if (upper) text.map { it.uppercaseChar() }.joinToString("") else text
 
     /** What [face] shows in the current state. */
     fun label(face: Face): String = when {
         face.action == KeyAction.Enter -> enterLabel ?: face.label
-        face.action is KeyAction.Text && shift != ShiftState.OFF -> face.label.uppercase()
+        face.action is KeyAction.Text && shift != ShiftState.OFF -> cased(face.label, true)
         else -> face.label
     }
 
