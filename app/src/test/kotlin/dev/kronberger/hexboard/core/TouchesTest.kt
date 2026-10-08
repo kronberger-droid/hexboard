@@ -23,7 +23,13 @@ class TouchesTest {
     // up to eleven times that at 1100px/s. No smoothing, so each move's
     // speed is exactly its own.
     private val gain = DragGain(stepPx = 10f, slowPxPerS = 100f, fastPxPerS = 1100f, maxGain = 11f, smoothMs = 0f)
-    private fun touches(flickMs: Long = 0) = Touches(thresholdPx = 50f, gain = gain, flickMs = flickMs)
+    private val edge = DragEdge(zonePx = 100f, maxPerS = 100f)
+    private fun touches(flickMs: Long = 0) = Touches(thresholdPx = 50f, gain = gain, flickMs = flickMs, edge = edge)
+
+    // A keyboard 1000px wide with edge strips of 100px, and a flat gain of
+    // one cluster per 10px so only the edge changes speed.
+    private fun edged(flickMs: Long = 0) =
+        Touches(50f, DragGain(10f, 1e6f, 2e6f, 1f, 0f), flickMs, edge).also { it.span(0f, 1000f) }
 
     private fun press(key: Key, g: Gesture = tap) = TouchEvent.Press(key, g)
     private fun by(drag: Drag, delta: Int) = TouchEvent.Act(KeyAction.DragBy(drag, delta))
@@ -134,6 +140,41 @@ class TouchesTest {
         assertEquals(none, t.move(0, 345f, 0f, timeMs = 50))
         assertEquals(listOf(by(Drag.SCRUB, 111)), t.move(0, 335f, 0f, timeMs = 150))
         assertEquals(listOf(by(Drag.SCRUB, 1), end(Drag.SCRUB)), t.up(0, 325f, 0f))
+    }
+
+    @Test
+    fun holdingInTheEdgeStripKeepsGoingFasterDeeperIn() {
+        val t = edged()
+        t.down(0, a, 500f, 0f, emptyMap())
+        t.move(0, 445f, 0f, timeMs = 0)
+        assertEquals(listOf(by(Drag.SCRUB, 30)), t.move(0, 145f, 0f, timeMs = 400))
+        assertEquals(listOf(by(Drag.SCRUB, 10)), t.move(0, 45f, 0f, timeMs = 500))
+        // 55% of the way in: 30.25 clusters/s while held still.
+        assertEquals(listOf(by(Drag.SCRUB, 30)), t.tick(1400))
+        assertEquals(listOf(by(Drag.SCRUB, 6)), t.tick(1600))
+        // Back out of the strip, it stops.
+        assertEquals(listOf(by(Drag.SCRUB, -10)), t.move(0, 145f, 0f, timeMs = 1700))
+        assertEquals(none, t.tick(2700))
+    }
+
+    @Test
+    fun keyStartingInTheStripOnlyRunsOnceDraggedTowardsTheEdge() {
+        val t = edged()
+        t.down(0, selectSpace, 920f, 0f, emptyMap())
+        assertEquals(listOf(by(Drag.SELECT, -1)), t.move(0, 865f, 0f, timeMs = 0))
+        assertEquals(none, t.tick(1000))
+        // The strip starts a threshold right of the key, at 970.
+        assertEquals(listOf(by(Drag.SELECT, 13)), t.move(0, 995f, 0f, timeMs = 1000))
+        assertEquals(listOf(by(Drag.SELECT, 35)), t.tick(1500))
+    }
+
+    @Test
+    fun heldFlickTravelIsReleasedWhileWaitingAtTheEdge() {
+        val t = edged(flickMs = 150)
+        t.down(0, a, 500f, 0f, emptyMap())
+        t.move(0, 445f, 0f, timeMs = 0)
+        assertEquals(none, t.move(0, 45f, 0f, timeMs = 50))
+        assertEquals(listOf(by(Drag.SCRUB, 72)), t.tick(1050))
     }
 
     @Test
