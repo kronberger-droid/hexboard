@@ -164,16 +164,16 @@ object Layouts {
      * Typewise's honeycomb, read off a screenshot of its German layout with
      * `y` and `z` swapped back to QWERTY places. The two space keys flank
      * `f h` in the middle row; shift and delete hang off the screen edges
-     * beside them. Dragging the left space selects, the right one moves the
-     * cursor.
+     * beside them. Dragging the left space moves the cursor and dragging
+     * enter selects; the right space scrubs and recalls like the letters.
      */
     val english = Layout.parse(
         listOf(
             "· w e t y i o",
             "q a r g u l p",
-            "⇧ ,/. ␣:select f h ␣:move !/? ⌫",
+            "⇧ ,/. ␣:move f h ␣ !/? ⌫",
             "z s d n m j k",
-            "· x c v b 😊/123 ⏎",
+            "· x c v b 😊/123 ⏎:select",
         ),
         bare = setOf("⇧", "⌫"),
         alternates = punctuation,
@@ -189,9 +189,9 @@ object Layouts {
         listOf(
             "· ~/^ 1 2 3 4 >/<",
             "$/€ =/+ 5 6 7 [/( ]/)",
-            "⇧ ,/. ␣:select 8 9 ␣:move !/? ⌫",
+            "⇧ ,/. ␣:move 8 9 ␣ !/? ⌫",
             "°/§ –/- _ 0 `/* |// ¡/¿",
-            "· & % @ # 😊/ABC ⏎",
+            "· & % @ # 😊/ABC ⏎:select",
         ),
         bare = setOf("⇧", "⌫"),
         alternates = punctuation + mapOf(

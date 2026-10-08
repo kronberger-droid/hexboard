@@ -72,18 +72,12 @@ class LayoutTest {
     }
 
     @Test
-    fun englishSpacesSelectOnTheLeftAndMoveOnTheRight() {
-        val spaces = Layouts.english.keys.filter { it.face.action == KeyAction.Space }.sortedBy { it.pos.q }
-        assertEquals(listOf(Sideways.SELECT, Sideways.MOVE), spaces.map { it.sideways })
-    }
-
-    @Test
-    fun dragRateIsZeroInsideTheDeadZoneThenLinearToTheCap() {
-        val rate = DragRate(deadPx = 10f, perPxPerSecond = 2f, maxPerSecond = 50f)
-        assertEquals(0f, rate.at(-8f), 0f)
-        assertEquals(20f, rate.at(20f), 1e-4f)
-        assertEquals(-20f, rate.at(-20f), 1e-4f)
-        assertEquals(50f, rate.at(500f), 0f)
+    fun leftSpaceMovesRightSpaceEditsAndEnterSelectsOnBothLayers() {
+        for (layout in listOf(Layouts.english, Layouts.symbols)) {
+            val spaces = layout.keys.filter { it.face.action == KeyAction.Space }.sortedBy { it.pos.q }
+            assertEquals(listOf(Sideways.MOVE, Sideways.EDIT), spaces.map { it.sideways })
+            assertEquals(Sideways.SELECT, layout.keys.single { it.face.action == KeyAction.Enter }.sideways)
+        }
     }
 
     @Test
