@@ -208,6 +208,9 @@ class Touches(
     /** Fingers still down, oldest first. */
     private val active = mutableListOf<Touch>()
 
+    /** No finger is down. */
+    val idle get() = active.isEmpty()
+
     /** Whether [tick] has work to do: a drag running or a long press pending. */
     val ticking get() = active.any { it.drag != null || holding(it) }
 

@@ -22,6 +22,7 @@ import dev.kronberger.hexboard.core.KeyAction
 import dev.kronberger.hexboard.core.Keyboard
 import dev.kronberger.hexboard.core.Layouts
 import dev.kronberger.hexboard.core.Recall
+import dev.kronberger.hexboard.core.Settings
 import dev.kronberger.hexboard.core.clusterEnd
 import dev.kronberger.hexboard.core.clusterStart
 import dev.kronberger.hexboard.core.parseEmojiAsset
@@ -56,6 +57,7 @@ class HexboardService : InputMethodService() {
     private var travel: Travel? = null
 
     private val keyboard = Keyboard(Layouts.english, Layouts.symbols)
+    private val prefs by lazy { Prefs.of(this) }
     private var view: KeyboardView? = null
     private var emojiPanel: EmojiPanelView? = null
 
@@ -109,7 +111,14 @@ class HexboardService : InputMethodService() {
             else -> null
         }
         showEmoji(false)
-        applyPalette(Palette.of(resources))
+        view?.configure(prefs)
+        applyPalette(
+            when (prefs[Settings.theme]) {
+                1 -> Palette.LIGHT
+                2 -> Palette.DARK
+                else -> Palette.of(resources)
+            },
+        )
         updateCaps()
     }
 
@@ -127,7 +136,7 @@ class HexboardService : InputMethodService() {
     private fun updateCaps() {
         val info = currentInputEditorInfo
         val ic = currentInputConnection
-        val wanted = info != null && ic != null && info.inputType != InputType.TYPE_NULL &&
+        val wanted = prefs[Settings.autoCaps] && info != null && ic != null && info.inputType != InputType.TYPE_NULL &&
             ic.getCursorCapsMode(info.inputType) != 0
         keyboard.autoCaps(wanted)
         view?.invalidate()

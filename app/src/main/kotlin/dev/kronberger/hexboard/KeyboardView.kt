@@ -22,6 +22,7 @@ import dev.kronberger.hexboard.core.Keyboard
 import dev.kronberger.hexboard.core.LONG_PRESS_MS
 import dev.kronberger.hexboard.core.Layout
 import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
+import dev.kronberger.hexboard.core.Settings
 import dev.kronberger.hexboard.core.ShiftState
 import dev.kronberger.hexboard.core.Point
 import dev.kronberger.hexboard.core.DRAG_EDGE_DP
@@ -53,7 +54,8 @@ class KeyboardView(
     private var builtFor: Layout? = null
     private val density = resources.displayMetrics.density
     private val padding = 4f * density
-    private val swipeThreshold = SWIPE_THRESHOLD_DP * density
+    private var haptics = true
+    private var sizeScale = 1f
 
     private val keyFill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val lowerFill = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -80,20 +82,41 @@ class KeyboardView(
     /** The key under each finger since it went down, lit until it lifts. */
     private val pressed = mutableMapOf<Int, Key>()
 
-    private val touches = Touches(
-        swipeThreshold,
-        DragGain(
-            DRAG_STEP_DP * density,
-            DRAG_SLOW_DP_S * density,
-            DRAG_FAST_DP_S * density,
-            DRAG_GAIN_MAX,
-            DRAG_SMOOTH_MS,
-        ),
+    private var touches = buildTouches(
+        SWIPE_THRESHOLD_DP, DRAG_STEP_DP, DRAG_GAIN_MAX, DRAG_EDGE_RATE_MAX, LONG_PRESS_MS,
+    )
+
+    private fun buildTouches(swipeDp: Float, stepDp: Float, gainMax: Float, edgeRate: Float, longPressMs: Long) = Touches(
+        swipeDp * density,
+        DragGain(stepDp * density, DRAG_SLOW_DP_S * density, DRAG_FAST_DP_S * density, gainMax, DRAG_SMOOTH_MS),
         DRAG_FLICK_MS,
         DRAG_FLICK_DP_S * density,
-        DragEdge(DRAG_EDGE_DP * density, DRAG_EDGE_RATE_START, DRAG_EDGE_RATE_MAX, DRAG_EDGE_RAMP_MS),
-        LONG_PRESS_MS,
+        DragEdge(DRAG_EDGE_DP * density, DRAG_EDGE_RATE_START, edgeRate, DRAG_EDGE_RAMP_MS),
+        longPressMs,
     )
+
+    /** Take up the user's settings; called whenever the keyboard opens. */
+    fun configure(p: Prefs) {
+        haptics = p[Settings.haptics]
+        val scale = p[Settings.size] / 100f
+        if (scale != sizeScale) {
+            sizeScale = scale
+            requestLayout()
+        }
+        if (!touches.idle) return
+        touches = buildTouches(
+            p[Settings.swipe].toFloat(),
+            p[Settings.dragStep].toFloat(),
+            p[Settings.dragGain].toFloat(),
+            p[Settings.edgeRate].toFloat(),
+            p[Settings.longPress].toLong(),
+        )
+        builtFor = null
+    }
+
+    private fun haptic(kind: Int) {
+        if (haptics) performHapticFeedback(kind)
+    }
 
     /** Advances drags and pending long presses every frame while there are any. */
     private val ticker = object : Runnable {
@@ -157,7 +180,7 @@ class KeyboardView(
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = MeasureSpec.getSize(widthMeasureSpec)
         val keysWidth = (width - insetLeft - insetRight - 2 * padding).toInt()
-        val keysHeight = keyboardHeightPx(layout, keysWidth, resources.displayMetrics.heightPixels)
+        val keysHeight = (keyboardHeightPx(layout, keysWidth, resources.displayMetrics.heightPixels) * sizeScale).toInt()
         setMeasuredDimension(width, keysHeight + (2 * padding).toInt() + insetBottom)
     }
 
@@ -304,7 +327,7 @@ class KeyboardView(
                 val key = layout.keyAt(g, event.getX(i), event.getY(i))
                 if (key != null) {
                     pressed[id] = key
-                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    haptic(HapticFeedbackConstants.KEYBOARD_TAP)
                     invalidate()
                 }
                 out += touches.down(id, key, event.getX(i), event.getY(i), others, event.eventTime)
@@ -336,7 +359,7 @@ class KeyboardView(
     private fun handle(e: TouchEvent) {
         when (e) {
             is TouchEvent.Press -> {
-                if (e.gesture == Gesture.Hold) performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                if (e.gesture == Gesture.Hold) haptic(HapticFeedbackConstants.LONG_PRESS)
                 keyboard.resolve(e.key, e.gesture)?.let(onAction)
             }
             is TouchEvent.Act -> onAction(e.action)
