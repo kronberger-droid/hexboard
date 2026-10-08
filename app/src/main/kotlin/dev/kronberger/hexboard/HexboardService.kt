@@ -6,6 +6,7 @@ import android.graphics.RectF
 import android.icu.text.BreakIterator
 import android.inputmethodservice.InputMethodService
 import android.os.Build
+import android.os.SystemClock
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
@@ -58,6 +59,12 @@ class HexboardService : InputMethodService() {
      * third space in a row does not, so it never stacks periods.
      */
     private var lastWasSpace = false
+
+    /**
+     * A drag in an editor that does not show us its text, such as a
+     * terminal, done with key events step by step instead.
+     */
+    private var blind: Drag? = null
 
     private var scrub: Scrub? = null
     private var restore: Restore? = null
@@ -172,6 +179,7 @@ class HexboardService : InputMethodService() {
         scrub = null
         restore = null
         travel = null
+        blind = null
     }
 
     override fun onUpdateSelection(
@@ -202,12 +210,13 @@ class HexboardService : InputMethodService() {
                 }
             }
             KeyAction.Delete -> deleteBack(ic)
-            is KeyAction.DragBy -> when (action.drag) {
-                Drag.SCRUB -> scrubBy(ic, action.delta)
-                Drag.RECALL -> recallBy(ic, action.delta)
-                Drag.MOVE, Drag.SELECT -> travelBy(ic, action.drag, action.delta)
+            is KeyAction.DragBy -> when {
+                blind == action.drag -> blindBy(ic, action.drag, action.delta)
+                action.drag == Drag.SCRUB -> scrubBy(ic, action.delta)
+                action.drag == Drag.RECALL -> recallBy(ic, action.delta)
+                else -> travelBy(ic, action.drag, action.delta)
             }
-            is KeyAction.DragEnd -> when (action.drag) {
+            is KeyAction.DragEnd -> if (blind == action.drag) blind = null else when (action.drag) {
                 Drag.SCRUB -> scrubEnd(ic, action.keep)
                 Drag.RECALL -> recallEnd(ic, action.keep)
                 Drag.MOVE -> travel = null
@@ -279,7 +288,7 @@ class HexboardService : InputMethodService() {
     }
 
     private fun scrubBy(ic: InputConnection, delta: Int) {
-        val s = scrub ?: startScrub(ic) ?: return
+        val s = scrub ?: startScrub(ic) ?: return goBlind(ic, Drag.SCRUB, delta)
         // Clamped here, so turning back reacts at once however long the
         // finger was held past the start of the text.
         s.steps = (s.steps + delta).coerceIn(0, s.boundaries.size - 1)
@@ -290,7 +299,8 @@ class HexboardService : InputMethodService() {
 
     private fun startScrub(ic: InputConnection): Scrub? {
         if (!cursor.known) return null
-        val before = ic.getTextBeforeCursor(WINDOW, 0)?.toString() ?: return null
+        val before = ic.getTextBeforeCursor(WINDOW, 0)?.toString()
+        if (before.isNullOrEmpty()) return null
         return Scrub(cursor.start, before, boundaries(before)).also { scrub = it }
     }
 
@@ -345,9 +355,35 @@ class HexboardService : InputMethodService() {
         if (length > 0) recall.restored(length, r.cursor + length)
     }
 
+    /** Carry on [drag] with key events, the way a backspace tap does when no text is visible. */
+    private fun goBlind(ic: InputConnection, drag: Drag, delta: Int) {
+        blind = drag
+        blindBy(ic, drag, delta)
+    }
+
+    /**
+     * One key event per step: deletes for a scrub, arrows for the cursor,
+     * shifted arrows for a selection. A scrub cannot take back what it
+     * deleted, and there is nothing to recall.
+     */
+    private fun blindBy(ic: InputConnection, drag: Drag, delta: Int) {
+        val code = when {
+            drag == Drag.SCRUB -> if (delta > 0) KeyEvent.KEYCODE_DEL else return
+            drag == Drag.RECALL -> return
+            delta < 0 -> KeyEvent.KEYCODE_DPAD_LEFT
+            else -> KeyEvent.KEYCODE_DPAD_RIGHT
+        }
+        val meta = if (drag == Drag.SELECT) KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON else 0
+        repeat(kotlin.math.abs(delta)) {
+            val now = SystemClock.uptimeMillis()
+            ic.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0, meta))
+            ic.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, code, 0, meta))
+        }
+    }
+
     /** Move the cursor, or the selection's moving end, by [delta] clusters. */
     private fun travelBy(ic: InputConnection, drag: Drag, delta: Int) {
-        val t = travel ?: startTravel(ic, drag) ?: return
+        val t = travel ?: startTravel(ic, drag) ?: return goBlind(ic, drag, delta)
         t.focus = t.step(t.focus, delta)
         if (drag == Drag.MOVE) t.anchor = t.focus
         val (start, end) = minOf(t.anchor, t.focus) to maxOf(t.anchor, t.focus)
@@ -360,6 +396,7 @@ class HexboardService : InputMethodService() {
         val before = ic.getTextBeforeCursor(WINDOW, 0)?.toString() ?: return null
         val selected = if (cursor.start < cursor.end) ic.getSelectedText(0)?.toString().orEmpty() else ""
         val after = ic.getTextAfterCursor(WINDOW, 0)?.toString().orEmpty()
+        if (before.isEmpty() && selected.isEmpty() && after.isEmpty()) return null
         recall.clear()
         // A selection drag moves the end of any existing selection; a cursor
         // drag starts from that end, collapsed.
