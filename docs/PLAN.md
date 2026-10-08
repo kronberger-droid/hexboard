@@ -28,12 +28,20 @@ the hand-over because the JVM tests cannot see them.
 Things noticed along the way that belong to no phase yet. Take them up
 when Martin asks, or fold them into Phase 8 where they fit.
 
-- **Drag tuning.** `SWIPE_THRESHOLD_DP` in `core/Gesture.kt`, and
-  `DRAG_STEP_DP`, `DRAG_SLOW_DP_S`, `DRAG_FAST_DP_S`, `DRAG_GAIN_MAX`,
-  `DRAG_SMOOTH_MS`, `DRAG_FLICK_MS`, `DRAG_FLICK_DP_S`, `DRAG_EDGE_DP`, `DRAG_EDGE_RATE_START`,
-  `DRAG_EDGE_RATE_MAX`, `DRAG_EDGE_RAMP_MS`
-  in `core/Touches.kt`. Martin expects to tune these; a settings screen
-  (Phase 8) could expose them.
+- **Drag tuning.** The settings screen exposes swipe distance, long-press
+  delay, slow drag step, fast drag gain and edge top speed
+  (`core/Settings.kt`). The rest stay constants: `DRAG_SLOW_DP_S`,
+  `DRAG_FAST_DP_S`, `DRAG_SMOOTH_MS`, `DRAG_FLICK_MS`, `DRAG_FLICK_DP_S`,
+  `DRAG_EDGE_DP`, `DRAG_EDGE_RATE_START`, `DRAG_EDGE_RAMP_MS` in
+  `core/Touches.kt`.
+- **Back gesture.** Edge keys ask to be excluded from the system back
+  swipe, but Android grants at most 200 dp per edge and the keyboard is
+  likely taller. Check on the phone that dragging left from `⌫` and enter
+  never goes back; if one does, exclude only the keys that need it. Drags
+  that reach the edge strip from inside are safe, since back only starts
+  from a touch that lands at the edge.
+- **Key-event drags** in editors that hide their text (Termux) are
+  untried on the device.
 - **Selection toolbar** after an enter drag uses a `SelectRangeGesture`
   (API 34+). Unverified in Chrome and Compose text fields; if it fails
   there, the fallback is an in-keyboard cut/copy/paste bar through
@@ -137,3 +145,9 @@ when Martin asks, or fold them into Phase 8 where they fit.
   highlight.
 - Optionally a small settings activity for key size, haptics, swipe
   threshold.
+- Built along the way: long press and up-right swipe for `ä ö ü ß`,
+  auto-capitalization from the editor's caps mode, double space for `. `,
+  emoji skin tones on long press, batched drag updates, key-event drags
+  where the editor hides its text, and drags that fetch more text past
+  2000 characters.
+- **Done when:** all of the above hold on the phone, light and dark.
