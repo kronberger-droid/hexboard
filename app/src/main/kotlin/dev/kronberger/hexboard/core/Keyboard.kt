@@ -11,6 +11,24 @@ class Keyboard(private val letters: Layout, private val symbols: Layout = letter
     var shift = ShiftState.OFF
         private set
 
+    /** Whether the one-shot shift was set by [autoCaps] rather than the shift key. */
+    private var autoShifted = false
+
+    /**
+     * The editor wants a capital next ([wanted]) or not. Sets a one-shot
+     * shift when it does; when it no longer does, takes back only a shift
+     * it set itself, never one from the shift key.
+     */
+    fun autoCaps(wanted: Boolean) {
+        if (wanted && shift == ShiftState.OFF) {
+            shift = ShiftState.ONCE
+            autoShifted = true
+        } else if (!wanted && autoShifted && shift == ShiftState.ONCE) {
+            shift = ShiftState.OFF
+            autoShifted = false
+        }
+    }
+
     var showingSymbols = false
 
     val layout: Layout get() = if (showingSymbols) symbols else letters
@@ -31,11 +49,13 @@ class Keyboard(private val letters: Layout, private val symbols: Layout = letter
      */
     fun resolve(key: Key, gesture: Gesture): KeyAction? = when (val action = action(key, gesture)) {
         KeyAction.Shift -> {
-            shift = when (shift) {
+            // Tapping shift while auto-shifted means: not a capital here.
+            shift = if (autoShifted) ShiftState.OFF else when (shift) {
                 ShiftState.OFF -> ShiftState.ONCE
                 ShiftState.ONCE -> ShiftState.LOCKED
                 ShiftState.LOCKED -> ShiftState.OFF
             }
+            autoShifted = false
             null
         }
         KeyAction.Symbols, KeyAction.Letters -> {
@@ -78,6 +98,7 @@ class Keyboard(private val letters: Layout, private val symbols: Layout = letter
     /** A one-shot shift lasts for exactly one typed character. */
     private fun typed(action: KeyAction): KeyAction {
         if (shift == ShiftState.ONCE) shift = ShiftState.OFF
+        autoShifted = false
         return action
     }
 }

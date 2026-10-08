@@ -108,6 +108,16 @@ class HexboardService : InputMethodService() {
             else -> null
         }
         showEmoji(false)
+        updateCaps()
+    }
+
+    /** Shift for a capital when the editor expects one, e.g. at a sentence start. */
+    private fun updateCaps() {
+        val info = currentInputEditorInfo
+        val ic = currentInputConnection
+        val wanted = info != null && ic != null && info.inputType != InputType.TYPE_NULL &&
+            ic.getCursorCapsMode(info.inputType) != 0
+        keyboard.autoCaps(wanted)
         view?.invalidate()
     }
 
@@ -141,7 +151,10 @@ class HexboardService : InputMethodService() {
         candidatesStart: Int, candidatesEnd: Int,
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
-        if (cursor.reported(newSelStart, newSelEnd)) recall.clear()
+        if (cursor.reported(newSelStart, newSelEnd)) {
+            recall.clear()
+            updateCaps()
+        }
     }
 
     private fun onAction(action: KeyAction) {
@@ -179,6 +192,8 @@ class HexboardService : InputMethodService() {
             // Keyboard consumes these.
             KeyAction.Shift, KeyAction.Symbols -> Unit
         }
+        // The editor answers in order, so this already sees the edit above.
+        if (action !is KeyAction.DragBy) updateCaps()
     }
 
     private fun type(ic: InputConnection, text: String) {

@@ -50,6 +50,47 @@ class KeyboardTest {
     }
 
     @Test
+    fun autoCapsShiftsOnceAndTakesBackOnlyItsOwnShift() {
+        val kb = Keyboard(layout)
+        kb.autoCaps(true)
+        assertEquals(ShiftState.ONCE, kb.shift)
+        kb.autoCaps(false)
+        assertEquals(ShiftState.OFF, kb.shift)
+        kb.press(shiftKey)
+        kb.autoCaps(false)
+        assertEquals(ShiftState.ONCE, kb.shift)
+    }
+
+    @Test
+    fun autoCapsTypesOneCapital() {
+        val kb = Keyboard(layout)
+        kb.autoCaps(true)
+        assertEquals(text("A"), kb.press(a))
+        assertEquals(text("a"), kb.press(a))
+    }
+
+    @Test
+    fun shiftWhileAutoShiftedTurnsItOff() {
+        val kb = Keyboard(layout)
+        kb.autoCaps(true)
+        kb.press(shiftKey)
+        assertEquals(ShiftState.OFF, kb.shift)
+        // Still off when the editor asks again, until the next capital is due.
+        kb.autoCaps(false)
+        assertEquals(ShiftState.OFF, kb.shift)
+    }
+
+    @Test
+    fun autoCapsLeavesCapsLockAlone() {
+        val kb = Keyboard(layout)
+        kb.press(shiftKey)
+        kb.press(shiftKey)
+        kb.autoCaps(true)
+        kb.autoCaps(false)
+        assertEquals(ShiftState.LOCKED, kb.shift)
+    }
+
+    @Test
     fun swipeUpTypesACapital() {
         assertEquals(text("A"), Keyboard(layout).press(a, swipe(Direction.UP)))
     }
