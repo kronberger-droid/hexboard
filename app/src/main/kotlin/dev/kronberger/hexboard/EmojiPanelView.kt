@@ -3,7 +3,6 @@ package dev.kronberger.hexboard
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.view.MotionEvent
@@ -51,21 +50,27 @@ class EmojiPanelView(
     private var insetBottom = 0
 
     private val emojiPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
-    private val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(0x9a, 0x9a, 0x9a)
-        textSize = 13f * density
-    }
+    private val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 13f * density }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
         textAlign = Paint.Align.CENTER
         textSize = 16f * density
     }
-    private val barFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(0x2e, 0x2e, 0x2e) }
-    private val spaceFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(0x48, 0x48, 0x48) }
-    private val accent = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(0x9a, 0x9a, 0x9a) }
+    private val barFill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val spaceFill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val accent = Paint(Paint.ANTI_ALIAS_FLAG)
 
     init {
-        setBackgroundColor(Color.rgb(0x12, 0x12, 0x12))
+        applyPalette(Palette.DARK)
+    }
+
+    fun applyPalette(p: Palette) {
+        headerPaint.color = p.hint
+        labelPaint.color = p.label
+        barFill.color = p.key
+        spaceFill.color = p.space
+        accent.color = p.hint
+        setBackgroundColor(p.background)
+        invalidate()
     }
 
     private companion object {

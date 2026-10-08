@@ -9,6 +9,7 @@ import android.os.Build
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
+import android.view.WindowInsetsController
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.HandwritingGesture
 import android.view.inputmethod.InputConnection
@@ -108,7 +109,18 @@ class HexboardService : InputMethodService() {
             else -> null
         }
         showEmoji(false)
+        applyPalette(Palette.of(resources))
         updateCaps()
+    }
+
+    private fun applyPalette(p: Palette) {
+        view?.applyPalette(p)
+        emojiPanel?.applyPalette(p)
+        // The IME switcher strip is drawn over the keyboard's own background.
+        if (Build.VERSION.SDK_INT >= 30) {
+            val light = WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            window.window?.insetsController?.setSystemBarsAppearance(if (p.light) light else 0, light)
+        }
     }
 
     /** Shift for a capital when the editor expects one, e.g. at a sentence start. */

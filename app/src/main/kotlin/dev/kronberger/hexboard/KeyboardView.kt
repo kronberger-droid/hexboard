@@ -2,7 +2,6 @@ package dev.kronberger.hexboard
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
@@ -56,26 +55,16 @@ class KeyboardView(
     private val padding = 4f * density
     private val swipeThreshold = SWIPE_THRESHOLD_DP * density
 
-    private val keyFill = paint(0x2e2e2e)
-    private val lowerFill = paint(0x262626)
-    private val spaceFill = paint(0x484848)
-    private val enterFill = paint(0x5a5a5a)
-    private val pressedFill = paint(0x7a7a7a)
-    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        textAlign = Paint.Align.CENTER
-    }
+    private val keyFill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val lowerFill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val spaceFill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val enterFill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val pressedFill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
     /** Multi-character labels such as `123`, which would crowd a hex at full size. */
-    private val smallLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        textAlign = Paint.Align.CENTER
-    }
-    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(0x9a, 0x9a, 0x9a)
-        textAlign = Paint.Align.CENTER
-    }
+    private val smallLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
     }
@@ -125,7 +114,21 @@ class KeyboardView(
     }
 
     init {
-        setBackgroundColor(Color.rgb(0x12, 0x12, 0x12))
+        applyPalette(Palette.DARK)
+    }
+
+    fun applyPalette(p: Palette) {
+        keyFill.color = p.key
+        lowerFill.color = p.lower
+        spaceFill.color = p.space
+        enterFill.color = p.enter
+        pressedFill.color = p.pressed
+        labelPaint.color = p.label
+        smallLabelPaint.color = p.label
+        iconPaint.color = p.label
+        hintPaint.color = p.hint
+        setBackgroundColor(p.background)
+        invalidate()
     }
 
     private companion object {
@@ -139,8 +142,6 @@ class KeyboardView(
             Direction.UP_LEFT to (-0.866f to -0.5f),
         )
     }
-
-    private fun paint(rgb: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(rgb shr 16, (rgb shr 8) and 0xff, rgb and 0xff) }
 
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
         val clear = keyboardInsets(insets, density)
