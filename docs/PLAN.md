@@ -30,7 +30,7 @@ when Martin asks, or fold them into Phase 8 where they fit.
 
 - **Drag tuning.** `SWIPE_THRESHOLD_DP` in `core/Gesture.kt`, and
   `DRAG_STEP_DP`, `DRAG_SLOW_DP_S`, `DRAG_FAST_DP_S`, `DRAG_GAIN_MAX`,
-  `DRAG_SMOOTH_MS`, `DRAG_FLICK_MS`, `DRAG_EDGE_DP`, `DRAG_EDGE_RATE_START`,
+  `DRAG_SMOOTH_MS`, `DRAG_FLICK_MS`, `DRAG_FLICK_DP_S`, `DRAG_EDGE_DP`, `DRAG_EDGE_RATE_START`,
   `DRAG_EDGE_RATE_MAX`, `DRAG_EDGE_RAMP_MS`
   in `core/Touches.kt`. Martin expects to tune these; a settings screen
   (Phase 8) could expose them.
@@ -97,9 +97,9 @@ when Martin asks, or fold them into Phase 8 where they fit.
   keeps it, and what was not brought back stays recallable. The buffer is
   invalidated in `onUpdateSelection` when the cursor moves elsewhere.
 - Sideways drags work like trackpad pointer acceleration (`DragGain`):
-  the first step comes as the drag starts, a drag lifted within
-  `DRAG_FLICK_MS` takes back all but that step, and otherwise it moves
-  only while the finger does, one cluster per few dp when slow and many per dp when
+  the first step comes as the drag starts. A fast start lifted within
+  `DRAG_FLICK_MS` is a flick: what followed was held back and is dropped.
+  Otherwise the drag moves only while the finger does, one cluster per few dp when slow and many per dp when
   fast. Reach is 2000 chars either way of where the drag started
   (`WINDOW` in the service). Past what the finger can cover, holding it
   in the strip at the keyboard's edge keeps the drag going like key

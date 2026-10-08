@@ -25,12 +25,13 @@ class TouchesTest {
     private val gain = DragGain(stepPx = 10f, slowPxPerS = 100f, fastPxPerS = 1100f, maxGain = 11f, smoothMs = 0f)
     // Edge strips start at 10 clusters/s and reach 110/s after a second held.
     private val edge = DragEdge(zonePx = 100f, startPerS = 10f, maxPerS = 110f, rampMs = 1000f)
-    private fun touches(flickMs: Long = 0) = Touches(thresholdPx = 50f, gain = gain, flickMs = flickMs, edge = edge)
+    // Flicks, where tested, are drags faster than 300px/s lifted within 150ms.
+    private fun touches(flickMs: Long = 0) = Touches(50f, gain, flickMs, flickPxPerS = 300f, edge = edge)
 
     // A keyboard 1000px wide with edge strips of 100px, and a flat gain of
     // one cluster per 10px so only the edge changes speed.
     private fun edged(flickMs: Long = 0) =
-        Touches(50f, DragGain(10f, 1e6f, 2e6f, 1f, 0f), flickMs, edge).also { it.span(0f, 1000f) }
+        Touches(50f, DragGain(10f, 1e6f, 2e6f, 1f, 0f), flickMs, 300f, edge).also { it.span(0f, 1000f) }
 
     private fun press(key: Key, g: Gesture = tap) = TouchEvent.Press(key, g)
     private fun by(drag: Drag, delta: Int) = TouchEvent.Act(KeyAction.DragBy(drag, delta))
@@ -125,23 +126,33 @@ class TouchesTest {
     }
 
     @Test
-    fun fastFlickLiftedInsideTheWindowMovesExactlyOne() {
+    fun fastFlickLiftedInsideTheWindowMovesExactlyOneAndShowsNoMore() {
         val t = touches(flickMs = 150)
         t.down(0, a, 500f, 0f, emptyMap())
         assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 445f, 0f, timeMs = 0))
-        // It moves live, so there is no stall after the first step...
-        assertEquals(listOf(by(Drag.SCRUB, 110)), t.move(0, 345f, 0f, timeMs = 50))
-        // ...and lifting this soon takes all but the first step back.
-        assertEquals(listOf(by(Drag.SCRUB, -110), end(Drag.SCRUB)), t.up(0, 300f, 0f))
+        assertEquals(none, t.move(0, 345f, 0f, timeMs = 50))
+        assertEquals(none, t.tick(100))
+        assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 300f, 0f))
     }
 
     @Test
-    fun dragOutlastingTheFlickWindowKeepsWhatItMoved() {
+    fun slowStartShowsItsMovesAtOnce() {
         val t = touches(flickMs = 150)
         t.down(0, a, 500f, 0f, emptyMap())
         t.move(0, 445f, 0f, timeMs = 0)
-        assertEquals(listOf(by(Drag.SCRUB, 110)), t.move(0, 345f, 0f, timeMs = 50))
-        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 335f, 0f, timeMs = 150))
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 435f, 0f, timeMs = 100))
+        assertEquals(listOf(by(Drag.SCRUB, 110)), t.move(0, 335f, 0f, timeMs = 140))
+        assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 335f, 0f))
+    }
+
+    @Test
+    fun fastDragOutlastingTheFlickWindowCatchesUp() {
+        val t = touches(flickMs = 150)
+        t.down(0, a, 500f, 0f, emptyMap())
+        t.move(0, 445f, 0f, timeMs = 0)
+        assertEquals(none, t.move(0, 345f, 0f, timeMs = 50))
+        assertEquals(listOf(by(Drag.SCRUB, 110)), t.tick(150))
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 335f, 0f, timeMs = 250))
         assertEquals(listOf(by(Drag.SCRUB, 1), end(Drag.SCRUB)), t.up(0, 325f, 0f))
     }
 
@@ -181,8 +192,8 @@ class TouchesTest {
         val t = edged(flickMs = 150)
         t.down(0, a, 500f, 0f, emptyMap())
         t.move(0, 445f, 0f, timeMs = 0)
-        assertEquals(listOf(by(Drag.SCRUB, 40)), t.move(0, 45f, 0f, timeMs = 50))
-        assertEquals(listOf(by(Drag.SCRUB, 110)), t.tick(1050))
+        assertEquals(none, t.move(0, 45f, 0f, timeMs = 50))
+        assertEquals(listOf(by(Drag.SCRUB, 150)), t.tick(1050))
         assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 45f, 0f))
     }
 

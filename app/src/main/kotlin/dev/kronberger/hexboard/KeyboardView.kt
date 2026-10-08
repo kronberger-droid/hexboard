@@ -27,6 +27,7 @@ import dev.kronberger.hexboard.core.DRAG_EDGE_RAMP_MS
 import dev.kronberger.hexboard.core.DRAG_EDGE_RATE_MAX
 import dev.kronberger.hexboard.core.DRAG_EDGE_RATE_START
 import dev.kronberger.hexboard.core.DRAG_FAST_DP_S
+import dev.kronberger.hexboard.core.DRAG_FLICK_DP_S
 import dev.kronberger.hexboard.core.DRAG_FLICK_MS
 import dev.kronberger.hexboard.core.DRAG_GAIN_MAX
 import dev.kronberger.hexboard.core.DRAG_SLOW_DP_S
@@ -92,6 +93,7 @@ class KeyboardView(
             DRAG_SMOOTH_MS,
         ),
         DRAG_FLICK_MS,
+        DRAG_FLICK_DP_S * density,
         DragEdge(DRAG_EDGE_DP * density, DRAG_EDGE_RATE_START, DRAG_EDGE_RATE_MAX, DRAG_EDGE_RAMP_MS),
     )
 

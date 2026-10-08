@@ -28,6 +28,9 @@ const val DRAG_GAIN_MAX = 8f
 /** A drag lifted this soon after it started was a flick and moves one cluster. */
 const val DRAG_FLICK_MS = 150L
 
+/** A drag starting slower than this is no flick, so it shows its moves at once. */
+const val DRAG_FLICK_DP_S = 300f
+
 /** Time constant of the finger speed estimate, which irons out sample jitter. */
 const val DRAG_SMOOTH_MS = 30f
 
@@ -98,10 +101,11 @@ class DragEdge(
  * its [Sideways] drag. Which of the four is fixed when the finger first
  * passes the threshold, so an up swipe that drifts left stays up.
  *
- * A sideways drag moves one cluster as it starts. If the finger lifts
- * within [flickMs], whatever followed is taken back, so a quick flick
- * moves exactly one. From there the drag moves only
- * while the finger does, by [gain] for the finger's speed: slow for fine
+ * A sideways drag moves one cluster as it starts. While it may still be a
+ * flick, moving faster than [flickPxPerS] within [flickMs] of starting,
+ * whatever follows is held back and dropped if the finger lifts, so a
+ * flick moves exactly one and shows nothing more. A slower start shows
+ * its moves at once. From there the drag moves only while the finger does, by [gain] for the finger's speed: slow for fine
  * work, fast to cover distance. Moving back at the same speed undoes the
  * same amount. Where the finger runs out of room, [edge] carries on, which
  * the caller drives with [tick] every frame while [dragging]. A drag is
@@ -112,6 +116,7 @@ class Touches(
     private val thresholdPx: Float,
     private val gain: DragGain,
     private val flickMs: Long,
+    private val flickPxPerS: Float,
     private val edge: DragEdge,
 ) {
     /** Horizontal extent of the keyboard the finger can reach, in px. */
@@ -143,8 +148,11 @@ class Touches(
         var edgeSide = 0
         var edgeSinceMs = 0L
 
-        /** Clusters reported after the first step, taken back if it was a flick. */
-        var moved = 0
+        /** Clusters held back while the drag may be a flick. */
+        var held = 0
+
+        /** Set once the drag is known not to be a flick; it does not change after. */
+        var live = false
 
         /** Smoothed finger speed in px/s while dragging. */
         var speed = 0f
@@ -238,14 +246,18 @@ class Touches(
         return report(t, drag)
     }
 
-    /** Push every drag whose finger sits in an edge strip on to [nowMs]. */
+    /**
+     * Bring every drag up to [nowMs]: push those whose finger sits in an
+     * edge strip, and release what a drag held back once it is no flick.
+     */
     fun tick(nowMs: Long): List<TouchEvent> = active.mapNotNull { t ->
         val drag = t.drag ?: return@mapNotNull null
         t.seenMs = max(t.seenMs, nowMs)
-        if (t.edgeSide == 0) return@mapNotNull null
-        val seconds = (nowMs - t.pushedMs) / 1000f
-        t.pushedMs = nowMs
-        t.carry += forward(drag, t.edgeSide * edge.speed(nowMs - t.edgeSinceMs) * seconds)
+        if (t.edgeSide != 0) {
+            val seconds = (nowMs - t.pushedMs) / 1000f
+            t.pushedMs = nowMs
+            t.carry += forward(drag, t.edgeSide * edge.speed(nowMs - t.edgeSinceMs) * seconds)
+        }
         report(t, drag)
     }
 
@@ -265,18 +277,24 @@ class Touches(
         return 0
     }
 
-    /** Report the whole clusters of [t]'s carry. */
+    /** Report the whole clusters of [t]'s carry, unless it may be a flick. */
     private fun report(t: Touch, drag: Drag): TouchEvent? {
         // Rounding keeps the remainder within half a cluster, so jitter
         // smaller than a step never flips the cursor back and forth.
         val whole = t.carry.roundToInt()
-        if (whole == 0) return null
         t.carry -= whole
-        t.moved += whole
-        return TouchEvent.Act(KeyAction.DragBy(drag, whole))
+        t.held += whole
+        if (flicking(t) || t.held == 0) return null
+        val delta = t.held
+        t.held = 0
+        return TouchEvent.Act(KeyAction.DragBy(drag, delta))
     }
 
-    private fun flicking(t: Touch) = t.seenMs - t.startMs < flickMs
+    private fun flicking(t: Touch): Boolean {
+        if (t.live) return false
+        t.live = t.seenMs - t.startMs >= flickMs || t.speed <= flickPxPerS
+        return !t.live
+    }
 
     /** Finger [id] lifted at ([x], [y]); empty if it was already finished. */
     fun up(id: Int, x: Float, y: Float): List<TouchEvent> {
@@ -296,11 +314,7 @@ class Touches(
         t.drag?.let { drag ->
             // A flick keeps only its first step. Otherwise land where the
             // finger lifted, even if no move event got there.
-            val last = when {
-                !flicking(t) -> glide(t, x, t.lastMs)
-                t.moved != 0 -> TouchEvent.Act(KeyAction.DragBy(drag, -t.moved))
-                else -> null
-            }
+            val last = if (flicking(t)) null else glide(t, x, t.lastMs)
             return listOfNotNull(last, TouchEvent.Act(KeyAction.DragEnd(drag)))
         }
         val dx = x - t.x
