@@ -28,7 +28,7 @@ const val DRAG_GAIN_MAX = 8f
 /** A drag lifted this soon after it started was a flick and moves one cluster. */
 const val DRAG_FLICK_MS = 150L
 
-/** A drag starting slower than this is no flick, so it shows its moves at once. */
+/** While a drag may still be a flick, a finger slower than this shows its moves at once. */
 const val DRAG_FLICK_DP_S = 300f
 
 /** Time constant of the finger speed estimate, which irons out sample jitter. */
@@ -101,11 +101,11 @@ class DragEdge(
  * its [Sideways] drag. Which of the four is fixed when the finger first
  * passes the threshold, so an up swipe that drifts left stays up.
  *
- * A sideways drag moves one cluster as it starts. While it may still be a
- * flick, moving faster than [flickPxPerS] within [flickMs] of starting,
- * whatever follows is held back and dropped if the finger lifts, so a
- * flick moves exactly one and shows nothing more. A slower start shows
- * its moves at once. From there the drag moves only while the finger does, by [gain] for the finger's speed: slow for fine
+ * A sideways drag moves one cluster as it starts. A drag lifted within
+ * [flickMs] was a flick and keeps only that one. Until then, moves made
+ * faster than [flickPxPerS] are held back, so a flick shows nothing more,
+ * while slower ones show at once and are taken back if it was a flick
+ * after all. From there the drag moves only while the finger does, by [gain] for the finger's speed: slow for fine
  * work, fast to cover distance. Moving back at the same speed undoes the
  * same amount. Where the finger runs out of room, [edge] carries on, which
  * the caller drives with [tick] every frame while [dragging]. A drag is
@@ -148,11 +148,17 @@ class Touches(
         var edgeSide = 0
         var edgeSinceMs = 0L
 
+        /** Whether [lastX] and [lastMs] hold a real sample yet. */
+        var sampled = false
+
+        /** Speed of the latest sample alone, in px/s. */
+        var raw = 0f
+
         /** Clusters held back while the drag may be a flick. */
         var held = 0
 
-        /** Set once the drag is known not to be a flick; it does not change after. */
-        var live = false
+        /** Clusters shown while the drag may be a flick, taken back if it is one. */
+        var shown = 0
 
         /** Smoothed finger speed in px/s while dragging. */
         var speed = 0f
@@ -207,6 +213,10 @@ class Touches(
     fun move(id: Int, x: Float, y: Float, timeMs: Long): List<TouchEvent> {
         val t = active.find { it.id == id } ?: return emptyList()
         if (t.drag != null) return listOfNotNull(glide(t, x, timeMs))
+        val (prevX, prevMs, sampled) = Triple(t.lastX, t.lastMs, t.sampled)
+        t.lastX = x
+        t.lastMs = timeMs
+        t.sampled = true
         val sideways = t.key.sideways ?: return emptyList()
         if (t.way != null) return emptyList()
         val way = way(x - t.x, y - t.y) ?: return emptyList()
@@ -214,8 +224,9 @@ class Touches(
         if (way == Way.UP || way == Way.DOWN) return emptyList()
         val drag = dragFor(sideways, way)
         t.drag = drag
-        t.lastX = x
-        t.lastMs = timeMs
+        // A finger that crossed the threshold in one sample is as fast as it gets.
+        t.raw = if (sampled && timeMs > prevMs) abs(x - prevX) * 1000f / (timeMs - prevMs) else Float.POSITIVE_INFINITY
+        if (t.raw.isFinite()) t.speed = t.raw
         t.startMs = timeMs
         t.seenMs = timeMs
         t.pushedMs = timeMs
@@ -230,6 +241,7 @@ class Touches(
         val dx = x - t.lastX
         val ms = timeMs - t.lastMs
         if (ms > 0) {
+            t.raw = abs(dx) * 1000f / ms
             val follow = if (gain.smoothMs > 0) 1 - exp(-ms / gain.smoothMs) else 1f
             t.speed += (abs(dx) * 1000f / ms - t.speed) * follow
             t.lastMs = timeMs
@@ -283,18 +295,24 @@ class Touches(
         // smaller than a step never flips the cursor back and forth.
         val whole = t.carry.roundToInt()
         t.carry -= whole
-        t.held += whole
-        if (flicking(t) || t.held == 0) return null
-        val delta = t.held
+        if (mayFlick(t)) {
+            // Fast moves wait for the window to end, so a flick slowing
+            // down before it lifts does not show what it held back.
+            if (t.raw > flickPxPerS) {
+                t.held += whole
+                return null
+            }
+            if (whole == 0) return null
+            t.shown += whole
+            return TouchEvent.Act(KeyAction.DragBy(drag, whole))
+        }
+        val delta = t.held + whole
         t.held = 0
+        if (delta == 0) return null
         return TouchEvent.Act(KeyAction.DragBy(drag, delta))
     }
 
-    private fun flicking(t: Touch): Boolean {
-        if (t.live) return false
-        t.live = t.seenMs - t.startMs >= flickMs || t.speed <= flickPxPerS
-        return !t.live
-    }
+    private fun mayFlick(t: Touch) = t.seenMs - t.startMs < flickMs
 
     /** Finger [id] lifted at ([x], [y]); empty if it was already finished. */
     fun up(id: Int, x: Float, y: Float): List<TouchEvent> {
@@ -314,7 +332,11 @@ class Touches(
         t.drag?.let { drag ->
             // A flick keeps only its first step. Otherwise land where the
             // finger lifted, even if no move event got there.
-            val last = if (flicking(t)) null else glide(t, x, t.lastMs)
+            val last = when {
+                !mayFlick(t) -> glide(t, x, t.lastMs)
+                t.shown != 0 -> TouchEvent.Act(KeyAction.DragBy(drag, -t.shown))
+                else -> null
+            }
             return listOfNotNull(last, TouchEvent.Act(KeyAction.DragEnd(drag)))
         }
         val dx = x - t.x

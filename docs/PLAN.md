@@ -97,8 +97,9 @@ when Martin asks, or fold them into Phase 8 where they fit.
   keeps it, and what was not brought back stays recallable. The buffer is
   invalidated in `onUpdateSelection` when the cursor moves elsewhere.
 - Sideways drags work like trackpad pointer acceleration (`DragGain`):
-  the first step comes as the drag starts. A fast start lifted within
-  `DRAG_FLICK_MS` is a flick: what followed was held back and is dropped.
+  the first step comes as the drag starts. A drag lifted within
+  `DRAG_FLICK_MS` is a flick and keeps only that step; fast moves until
+  then are held back, so a flick shows no selection.
   Otherwise the drag moves only while the finger does, one cluster per few dp when slow and many per dp when
   fast. Reach is 2000 chars either way of where the drag started
   (`WINDOW` in the service). Past what the finger can cover, holding it

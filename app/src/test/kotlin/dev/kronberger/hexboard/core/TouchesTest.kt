@@ -136,13 +136,44 @@ class TouchesTest {
     }
 
     @Test
+    fun flickIsJudgedFromTheSampleThatCrossedTheThreshold() {
+        val t = touches(flickMs = 150)
+        t.down(0, a, 500f, 0f, emptyMap())
+        assertEquals(none, t.move(0, 480f, 0f, timeMs = 0))
+        // 40px in 10ms: fast from the start.
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 440f, 0f, timeMs = 10))
+        assertEquals(none, t.move(0, 340f, 0f, timeMs = 40))
+        assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 340f, 0f))
+    }
+
+    @Test
+    fun flickSlowingDownBeforeItLiftsKeepsWhatItHeldHidden() {
+        val t = touches(flickMs = 150)
+        t.down(0, a, 500f, 0f, emptyMap())
+        t.move(0, 445f, 0f, timeMs = 0)
+        assertEquals(none, t.move(0, 345f, 0f, timeMs = 50))
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 335f, 0f, timeMs = 150 - 1))
+        assertEquals(listOf(by(Drag.SCRUB, -1), end(Drag.SCRUB)), t.up(0, 335f, 0f))
+    }
+
+    @Test
     fun slowStartShowsItsMovesAtOnce() {
+        val t = touches(flickMs = 150)
+        t.down(0, a, 500f, 0f, emptyMap())
+        t.move(0, 480f, 0f, timeMs = 0)
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 445f, 0f, timeMs = 200))
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 435f, 0f, timeMs = 300))
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 425f, 0f, timeMs = 400))
+        assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 425f, 0f))
+    }
+
+    @Test
+    fun slowDragLiftedInsideTheWindowIsStillAFlick() {
         val t = touches(flickMs = 150)
         t.down(0, a, 500f, 0f, emptyMap())
         t.move(0, 445f, 0f, timeMs = 0)
         assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 435f, 0f, timeMs = 100))
-        assertEquals(listOf(by(Drag.SCRUB, 110)), t.move(0, 335f, 0f, timeMs = 140))
-        assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 335f, 0f))
+        assertEquals(listOf(by(Drag.SCRUB, -1), end(Drag.SCRUB)), t.up(0, 435f, 0f))
     }
 
     @Test
