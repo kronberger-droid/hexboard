@@ -29,8 +29,8 @@ Things noticed along the way that belong to no phase yet. Take them up
 when Martin asks, or fold them into Phase 8 where they fit.
 
 - **Drag tuning.** `SWIPE_THRESHOLD_DP` in `core/Gesture.kt`, and
-  `DRAG_STEP_DP`, `DRAG_FINE_STEPS`, `DRAG_RAMP_DP`, `DRAG_RATE_MAX` in
-  `core/Touches.kt`. Martin expects to tune these; a settings screen
+  `DRAG_STEP_DP`, `DRAG_SLOW_DP_S`, `DRAG_FAST_DP_S`, `DRAG_GAIN_MAX`,
+  `DRAG_SMOOTH_MS` in `core/Touches.kt`. Martin expects to tune these; a settings screen
   (Phase 8) could expose them.
 - **Selection toolbar** after an enter drag uses a `SelectRangeGesture`
   (API 34+). Unverified in Chrome and Compose text fields; if it fails
@@ -94,11 +94,12 @@ when Martin asks, or fold them into Phase 8 where they fit.
   the last deletion back cluster by cluster as composing text; release
   keeps it, and what was not brought back stays recallable. The buffer is
   invalidated in `onUpdateSelection` when the cursor moves elsewhere.
-- Sideways drags follow `DragCurve`: the first step comes as the drag
-  starts, the next few follow the finger's position one per few dp, and
-  beyond those speed grows with the finger's distance from where it went
-  down, reversing past that point. Reach is 2000 chars either way of where
-  the drag started (`WINDOW` in the service), not a screen width.
+- Sideways drags work like trackpad pointer acceleration (`DragGain`):
+  the first step comes as the drag starts, then the drag moves only while
+  the finger does, one cluster per few dp when slow and many per dp when
+  fast. Reach is 2000 chars either way of where the drag started
+  (`WINDOW` in the service); past what one swipe covers, lift and drag
+  again.
 - The left space moves the cursor and enter extends a selection from it
   (`␣:move`, `⏎:select` in the layout). The right space scrubs like the
   letters, so a backspace drag that lands on it still deletes.

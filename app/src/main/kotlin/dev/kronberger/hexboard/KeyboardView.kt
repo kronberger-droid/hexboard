@@ -8,7 +8,6 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
-import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
@@ -22,11 +21,12 @@ import dev.kronberger.hexboard.core.Layout
 import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
 import dev.kronberger.hexboard.core.ShiftState
 import dev.kronberger.hexboard.core.Point
-import dev.kronberger.hexboard.core.DRAG_FINE_STEPS
-import dev.kronberger.hexboard.core.DRAG_RAMP_DP
-import dev.kronberger.hexboard.core.DRAG_RATE_MAX
+import dev.kronberger.hexboard.core.DRAG_FAST_DP_S
+import dev.kronberger.hexboard.core.DRAG_GAIN_MAX
+import dev.kronberger.hexboard.core.DRAG_SLOW_DP_S
+import dev.kronberger.hexboard.core.DRAG_SMOOTH_MS
 import dev.kronberger.hexboard.core.DRAG_STEP_DP
-import dev.kronberger.hexboard.core.DragCurve
+import dev.kronberger.hexboard.core.DragGain
 import dev.kronberger.hexboard.core.TouchEvent
 import dev.kronberger.hexboard.core.Touches
 import dev.kronberger.hexboard.core.keyboardHeightPx
@@ -77,26 +77,14 @@ class KeyboardView(
 
     private val touches = Touches(
         swipeThreshold,
-        DragCurve(DRAG_STEP_DP * density, DRAG_FINE_STEPS, DRAG_RAMP_DP * density, DRAG_RATE_MAX),
+        DragGain(
+            DRAG_STEP_DP * density,
+            DRAG_SLOW_DP_S * density,
+            DRAG_FAST_DP_S * density,
+            DRAG_GAIN_MAX,
+            DRAG_SMOOTH_MS,
+        ),
     )
-
-    /** Advances drags every frame for as long as one is running. */
-    private val ticker = object : Runnable {
-        var scheduled = false
-
-        override fun run() {
-            scheduled = false
-            touches.tick(SystemClock.uptimeMillis()).forEach(::handle)
-            keepTicking()
-        }
-    }
-
-    private fun keepTicking() {
-        if (touches.dragging && !ticker.scheduled) {
-            ticker.scheduled = true
-            postOnAnimation(ticker)
-        }
-    }
 
     init {
         setBackgroundColor(Color.rgb(0x12, 0x12, 0x12))
@@ -266,8 +254,14 @@ class KeyboardView(
                 val key = layout.keyAt(g, event.getX(i), event.getY(i))
                 touches.down(id, key, event.getX(i), event.getY(i), others).forEach(::handle)
             }
+            // Batched samples first, so drags see the finger's real speed.
             MotionEvent.ACTION_MOVE -> for (p in 0 until event.pointerCount) {
-                touches.move(event.getPointerId(p), event.getX(p), event.getY(p), event.eventTime).forEach(::handle)
+                val pid = event.getPointerId(p)
+                for (h in 0 until event.historySize) {
+                    touches.move(pid, event.getHistoricalX(p, h), event.getHistoricalY(p, h), event.getHistoricalEventTime(h))
+                        .forEach(::handle)
+                }
+                touches.move(pid, event.getX(p), event.getY(p), event.eventTime).forEach(::handle)
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 touches.up(id, event.getX(i), event.getY(i)).forEach(::handle)
@@ -275,7 +269,6 @@ class KeyboardView(
             }
             MotionEvent.ACTION_CANCEL -> touches.cancel().forEach(::handle)
         }
-        keepTicking()
         return true
     }
 

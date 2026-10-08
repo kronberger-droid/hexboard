@@ -8,7 +8,8 @@ libraries.
   paired punctuation.
 - Swipe up for capitals, down for lowercase; shift and caps lock.
 - Drag left on almost any key to select backwards and delete, right to
-  bring the deletion back, with speed following the finger's distance.
+  bring the deletion back. Drags accelerate like a trackpad pointer: slow
+  for single characters, fast to cover distance.
 - Drag the left space to move the cursor, or enter to select.
 - Symbols layer, an emoji panel with recents, and enter that follows the
   text field's action.

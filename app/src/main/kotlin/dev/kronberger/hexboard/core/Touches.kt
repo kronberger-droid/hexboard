@@ -1,9 +1,9 @@
 package dev.kronberger.hexboard.core
 
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.hypot
-import kotlin.math.min
-import kotlin.math.sign
+import kotlin.math.roundToInt
 
 /** What a finger produced: a key press to resolve, or an action to perform as is. */
 sealed interface TouchEvent {
@@ -11,39 +11,39 @@ sealed interface TouchEvent {
     data class Act(val action: KeyAction) : TouchEvent
 }
 
-/** Finger travel past the swipe threshold per cluster, while the drag follows the finger. */
-const val DRAG_STEP_DP = 8f
+/** Finger travel per cluster for a slow finger: the finest a drag gets. */
+const val DRAG_STEP_DP = 7f
 
-/** Clusters a drag covers by finger position before speed takes over. */
-const val DRAG_FINE_STEPS = 6
+/** Finger speed up to which a drag keeps its finest step. */
+const val DRAG_SLOW_DP_S = 150f
 
-/** Distance beyond the fine steps over which speed climbs to [DRAG_RATE_MAX]. */
-const val DRAG_RAMP_DP = 120f
+/** Finger speed at which a drag reaches [DRAG_GAIN_MAX]. */
+const val DRAG_FAST_DP_S = 1500f
 
-/** Fastest a drag goes, in clusters per second. */
-const val DRAG_RATE_MAX = 400f
+/** How many times more clusters a fast finger covers than a slow one, per dp. */
+const val DRAG_GAIN_MAX = 16f
+
+/** Time constant of the finger speed estimate, which irons out sample jitter. */
+const val DRAG_SMOOTH_MS = 30f
 
 /**
- * How far a sideways drag goes for a finger some distance past the swipe
- * threshold. Close in, the drag follows the finger: one cluster at the
- * threshold and one more every [stepPx], up to [fineSteps]. Past those,
- * speed starts at zero and climbs with the square of the distance to
- * [maxPerSecond] over [rampPx], so going slightly beyond creeps and going
- * far races.
+ * How far a sideways drag goes per pixel of finger travel, like pointer
+ * acceleration on a trackpad. A finger slower than [slowPxPerS] moves one
+ * cluster every [stepPx]; from there the gain eases up to [maxGain] times
+ * that at [fastPxPerS]. Finger speed is smoothed over about [smoothMs].
  */
-class DragCurve(
+class DragGain(
     private val stepPx: Float,
-    private val fineSteps: Int,
-    private val rampPx: Float,
-    private val maxPerSecond: Float,
+    private val slowPxPerS: Float,
+    private val fastPxPerS: Float,
+    private val maxGain: Float,
+    val smoothMs: Float,
 ) {
-    /** Clusters the finger's position stands for, [pastPx] beyond the threshold. */
-    fun steps(pastPx: Float): Int = min(1 + (pastPx / stepPx).toInt(), fineSteps)
-
-    /** Clusters per second on top of [steps], [pastPx] beyond the threshold. */
-    fun speed(pastPx: Float): Float {
-        val ramp = ((pastPx - fineSteps * stepPx) / rampPx).coerceIn(0f, 1f)
-        return maxPerSecond * ramp * ramp
+    /** Clusters per pixel for a finger moving at [pxPerS]. */
+    fun at(pxPerS: Float): Float {
+        val t = ((pxPerS - slowPxPerS) / (fastPxPerS - slowPxPerS)).coerceIn(0f, 1f)
+        val eased = t * t * (3 - 2 * t)
+        return (1 + (maxGain - 1) * eased) / stepPx
     }
 }
 
@@ -62,14 +62,13 @@ class DragCurve(
  * passes the threshold, so an up swipe that drifts left stays up.
  *
  * A sideways drag moves one cluster as it starts, so a quick flick moves
- * exactly one. From there [curve] sets how far it goes: by the finger's
- * position near the start, then at a speed that grows with its distance
- * from where it went down. Coming back undoes the position steps, and
- * crossing the start reverses. The caller drives this with [tick] every
- * frame while [dragging]. A drag is never finished early by another
- * finger, and fingers landing while it runs are ignored.
+ * exactly one. From there it moves only while the finger does, by [gain]
+ * for the finger's speed: slow for fine work, fast to cover distance.
+ * Moving back at the same speed undoes the same amount. A drag is never
+ * finished early by another finger, and fingers landing while it runs are
+ * ignored.
  */
-class Touches(private val thresholdPx: Float, private val curve: DragCurve) {
+class Touches(private val thresholdPx: Float, private val gain: DragGain) {
 
     private enum class Way { UP, DOWN, LEFT, RIGHT }
 
@@ -80,17 +79,15 @@ class Touches(private val thresholdPx: Float, private val curve: DragCurve) {
         var lastX = x
         var lastMs = 0L
 
-        /** Clusters covered by speed so far, signed like the drag. */
-        var sped = 0f
+        /** Smoothed finger speed in px/s while dragging. */
+        var speed = 0f
 
-        /** Clusters reported so far, signed like the drag. */
-        var reported = 0
+        /** Clusters moved but not yet reported, within half a cluster of zero. */
+        var carry = 0f
     }
 
     /** Fingers still down, oldest first. */
     private val active = mutableListOf<Touch>()
-
-    val dragging get() = active.any { it.drag != null }
 
     /** The four-way direction of a displacement, or null below the threshold. */
     private fun way(dx: Float, dy: Float): Way? = when {
@@ -129,10 +126,10 @@ class Touches(private val thresholdPx: Float, private val curve: DragCurve) {
         return events
     }
 
-    /** Finger [id] moved to ([x], [y]) at [timeMs]. Only starting a drag reacts here. */
+    /** Finger [id] moved to ([x], [y]) at [timeMs]. Starts or advances a drag. */
     fun move(id: Int, x: Float, y: Float, timeMs: Long): List<TouchEvent> {
         val t = active.find { it.id == id } ?: return emptyList()
-        t.lastX = x
+        if (t.drag != null) return listOfNotNull(glide(t, x, timeMs))
         val sideways = t.key.sideways ?: return emptyList()
         if (t.way != null) return emptyList()
         val way = way(x - t.x, y - t.y) ?: return emptyList()
@@ -140,30 +137,30 @@ class Touches(private val thresholdPx: Float, private val curve: DragCurve) {
         if (way == Way.UP || way == Way.DOWN) return emptyList()
         val drag = dragFor(sideways, way)
         t.drag = drag
+        t.lastX = x
         t.lastMs = timeMs
-        t.reported = firstStep(drag, way)
-        return listOf(TouchEvent.Act(KeyAction.DragBy(drag, t.reported)))
+        return listOf(TouchEvent.Act(KeyAction.DragBy(drag, firstStep(drag, way))))
     }
 
-    /** Advance every drag to [nowMs] by where its finger is now. */
-    fun tick(nowMs: Long): List<TouchEvent> = active.mapNotNull { t ->
-        val seconds = (nowMs - t.lastMs) / 1000f
-        t.lastMs = nowMs
-        advance(t, seconds)
-    }
-
-    /** Report how far [t]'s drag has gone since last time, [seconds] later. */
-    private fun advance(t: Touch, seconds: Float): TouchEvent? {
+    /** Move [t]'s drag along with its finger, now at [x] at [timeMs]. */
+    private fun glide(t: Touch, x: Float, timeMs: Long): TouchEvent? {
         val drag = t.drag ?: return null
+        val dx = x - t.lastX
+        val ms = timeMs - t.lastMs
+        if (ms > 0) {
+            val follow = if (gain.smoothMs > 0) 1 - exp(-ms / gain.smoothMs) else 1f
+            t.speed += (abs(dx) * 1000f / ms - t.speed) * follow
+            t.lastMs = timeMs
+        }
+        t.lastX = x
         // A scrub grows leftwards; every other drag counts rightwards.
-        val offset = if (drag == Drag.SCRUB) t.x - t.lastX else t.lastX - t.x
-        val past = abs(offset) - thresholdPx
-        val steps = if (past < 0) 0 else sign(offset).toInt() * curve.steps(past)
-        if (past > 0) t.sped += sign(offset) * curve.speed(past) * seconds
-        val delta = steps + t.sped.toInt() - t.reported
-        if (delta == 0) return null
-        t.reported += delta
-        return TouchEvent.Act(KeyAction.DragBy(drag, delta))
+        t.carry += (if (drag == Drag.SCRUB) -dx else dx) * gain.at(t.speed)
+        // Rounding keeps the remainder within half a cluster, so jitter
+        // smaller than a step never flips the cursor back and forth.
+        val whole = t.carry.roundToInt()
+        if (whole == 0) return null
+        t.carry -= whole
+        return TouchEvent.Act(KeyAction.DragBy(drag, whole))
     }
 
     /** Finger [id] lifted at ([x], [y]); empty if it was already finished. */
@@ -182,9 +179,8 @@ class Touches(private val thresholdPx: Float, private val curve: DragCurve) {
 
     private fun finished(t: Touch, x: Float, y: Float): List<TouchEvent> {
         t.drag?.let { drag ->
-            // Land where the finger lifted, even if no frame saw it get there.
-            t.lastX = x
-            return listOfNotNull(advance(t, 0f), TouchEvent.Act(KeyAction.DragEnd(drag)))
+            // Land where the finger lifted, even if no move event got there.
+            return listOfNotNull(glide(t, x, t.lastMs), TouchEvent.Act(KeyAction.DragEnd(drag)))
         }
         val dx = x - t.x
         val dy = y - t.y

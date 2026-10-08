@@ -1,8 +1,6 @@
 package dev.kronberger.hexboard.core
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TouchesTest {
@@ -21,10 +19,11 @@ class TouchesTest {
     private val tap = Gesture.Tap
     private val none = emptyList<TouchEvent>()
 
-    // Threshold 50px. Past it, drags follow the finger one cluster per 10px
-    // for three clusters, then speed up from 30px past it to 100/s at 130px.
-    private val curve = DragCurve(stepPx = 10f, fineSteps = 3, rampPx = 100f, maxPerSecond = 100f)
-    private fun touches() = Touches(thresholdPx = 50f, curve = curve)
+    // Threshold 50px. Drags move one cluster per 10px up to 100px/s, easing
+    // up to eleven times that at 1100px/s. No smoothing, so each move's
+    // speed is exactly its own.
+    private val gain = DragGain(stepPx = 10f, slowPxPerS = 100f, fastPxPerS = 1100f, maxGain = 11f, smoothMs = 0f)
+    private fun touches() = Touches(thresholdPx = 50f, gain = gain)
 
     private fun press(key: Key, g: Gesture = tap) = TouchEvent.Press(key, g)
     private fun by(drag: Drag, delta: Int) = TouchEvent.Act(KeyAction.DragBy(drag, delta))
@@ -76,77 +75,63 @@ class TouchesTest {
     }
 
     @Test
-    fun curveStepsByPositionThenSpeedsUpFromZero() {
-        assertEquals(1, curve.steps(0f))
-        assertEquals(1, curve.steps(9.9f))
-        assertEquals(2, curve.steps(10f))
-        assertEquals(3, curve.steps(500f))
-        assertEquals(0f, curve.speed(30f), 0f)
-        assertEquals(25f, curve.speed(80f), 1e-3f)
-        assertEquals(100f, curve.speed(500f), 0f)
+    fun gainEasesFromTheSlowStepToItsMaximum() {
+        assertEquals(0.1f, gain.at(0f), 1e-6f)
+        assertEquals(0.1f, gain.at(100f), 1e-6f)
+        assertEquals(0.6f, gain.at(600f), 1e-6f)
+        assertEquals(1.1f, gain.at(5000f), 1e-6f)
     }
 
     @Test
-    fun scrubFollowsTheFingerNearTheStart() {
+    fun slowDragMovesOneClusterPerStepAndOnlyWhileMoving() {
         val t = touches()
         t.down(0, a, 500f, 0f, emptyMap())
         assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 445f, 0f, timeMs = 0))
-        assertTrue(t.dragging)
-        t.move(0, 425f, 0f, timeMs = 50)
-        assertEquals(listOf(by(Drag.SCRUB, 2)), t.tick(100))
-        // Holding still stays put however long it lasts.
-        assertEquals(none, t.tick(5000))
-        t.move(0, 445f, 0f, timeMs = 5000)
-        assertEquals(listOf(by(Drag.SCRUB, -2)), t.tick(5100))
-        assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 445f, 0f))
-        assertFalse(t.dragging)
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 435f, 0f, timeMs = 100))
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 425f, 0f, timeMs = 200))
+        assertEquals(listOf(by(Drag.SCRUB, -1)), t.move(0, 435f, 0f, timeMs = 300))
+        assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 435f, 0f))
     }
 
     @Test
-    fun farOutTheDragSpeedsUpWithDistance() {
+    fun fastSwipeCoversManyAndTheSameSwipeBackUndoesThem() {
         val t = touches()
         t.down(0, a, 500f, 0f, emptyMap())
         t.move(0, 445f, 0f, timeMs = 0)
-        // 120px past the threshold: three steps plus 81 clusters/s.
-        t.move(0, 330f, 0f, timeMs = 0)
-        assertEquals(listOf(by(Drag.SCRUB, 10)), t.tick(100))
-        // 170px past it is beyond the ramp: 100/s.
-        t.move(0, 280f, 0f, timeMs = 100)
-        assertEquals(listOf(by(Drag.SCRUB, 10)), t.tick(200))
+        // 100px in 50ms is 2000px/s, past the top of the ramp.
+        assertEquals(listOf(by(Drag.SCRUB, 110)), t.move(0, 345f, 0f, timeMs = 50))
+        // Slowing down is fine-grained again straight away.
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 335f, 0f, timeMs = 150))
+        assertEquals(listOf(by(Drag.SCRUB, -1)), t.move(0, 345f, 0f, timeMs = 250))
+        assertEquals(listOf(by(Drag.SCRUB, -110)), t.move(0, 445f, 0f, timeMs = 300))
     }
 
     @Test
-    fun comingBackGivesUpThePositionStepsAndCrossingTheStartReverses() {
+    fun jitterSmallerThanAStepNeverFlickers() {
         val t = touches()
         t.down(0, a, 500f, 0f, emptyMap())
         t.move(0, 445f, 0f, timeMs = 0)
-        t.move(0, 280f, 0f, timeMs = 0)
-        assertEquals(listOf(by(Drag.SCRUB, 12)), t.tick(100))
-        // Back at the start, only what speed covered remains.
-        t.move(0, 500f, 0f, timeMs = 100)
-        assertEquals(listOf(by(Drag.SCRUB, -3)), t.tick(200))
-        assertEquals(none, t.tick(1200))
-        // 50px past the threshold on the other side: three steps back, and 4/s.
-        t.move(0, 600f, 0f, timeMs = 1200)
-        assertEquals(listOf(by(Drag.SCRUB, -7)), t.tick(2200))
+        for (i in 1..6) {
+            val x = if (i % 2 == 1) 441f else 445f
+            assertEquals(none, t.move(0, x, 0f, timeMs = i * 100L))
+        }
     }
 
     @Test
-    fun recallGoesRightAndKeepsGoingWhileHeldFarOut() {
+    fun recallGoesRightWithTheFinger() {
         val t = touches()
         t.down(0, a, 500f, 0f, emptyMap())
         assertEquals(listOf(by(Drag.RECALL, 1)), t.move(0, 555f, 0f, timeMs = 0))
-        t.move(0, 680f, 0f, timeMs = 0)
-        assertEquals(listOf(by(Drag.RECALL, 22)), t.tick(200))
-        assertEquals(listOf(by(Drag.RECALL, 20)), t.tick(400))
+        assertEquals(listOf(by(Drag.RECALL, 110)), t.move(0, 655f, 0f, timeMs = 50))
     }
 
     @Test
-    fun liftingLandsWhereTheFingerIsEvenBetweenFrames() {
+    fun liftingLandsWhereTheFingerIsEvenWithoutAMove() {
         val t = touches()
         t.down(0, a, 500f, 0f, emptyMap())
         t.move(0, 445f, 0f, timeMs = 0)
-        assertEquals(listOf(by(Drag.SCRUB, 2), end(Drag.SCRUB)), t.up(0, 420f, 0f))
+        t.move(0, 435f, 0f, timeMs = 100)
+        assertEquals(listOf(by(Drag.SCRUB, 1), end(Drag.SCRUB)), t.up(0, 425f, 0f))
     }
 
     @Test
@@ -163,13 +148,11 @@ class TouchesTest {
         val t = touches()
         t.down(0, moveSpace, 500f, 0f, emptyMap())
         assertEquals(listOf(by(Drag.MOVE, -1)), t.move(0, 445f, 0f, timeMs = 0))
-        t.move(0, 435f, 0f, timeMs = 50)
-        assertEquals(listOf(by(Drag.MOVE, -1)), t.tick(100))
+        assertEquals(listOf(by(Drag.MOVE, -1)), t.move(0, 435f, 0f, timeMs = 100))
         t.up(0, 435f, 0f)
         t.down(1, selectSpace, 500f, 0f, emptyMap())
         assertEquals(listOf(by(Drag.SELECT, 1)), t.move(1, 555f, 0f, timeMs = 0))
-        t.move(1, 565f, 0f, timeMs = 50)
-        assertEquals(listOf(by(Drag.SELECT, 1)), t.tick(100))
+        assertEquals(listOf(by(Drag.SELECT, 1)), t.move(1, 565f, 0f, timeMs = 100))
         assertEquals(listOf(end(Drag.SELECT)), t.up(1, 565f, 0f))
     }
 
@@ -203,7 +186,6 @@ class TouchesTest {
         t.down(0, a, 500f, 0f, emptyMap())
         assertEquals(none, t.move(0, 500f, -60f, timeMs = 0))
         assertEquals(none, t.move(0, 380f, -60f, timeMs = 10))
-        assertFalse(t.dragging)
         assertEquals(listOf(press(a, Gesture.Swipe(Direction.UP))), t.up(0, 380f, -60f))
     }
 
@@ -220,7 +202,6 @@ class TouchesTest {
         val t = touches()
         t.down(0, punct, 500f, 0f, emptyMap())
         assertEquals(none, t.move(0, 440f, -20f, timeMs = 0))
-        assertFalse(t.dragging)
         assertEquals(listOf(press(punct, Gesture.Swipe(Direction.UP_LEFT))), t.up(0, 440f, -20f))
     }
 
