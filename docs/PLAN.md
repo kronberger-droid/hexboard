@@ -30,7 +30,8 @@ when Martin asks, or fold them into Phase 8 where they fit.
 
 - **Drag tuning.** `SWIPE_THRESHOLD_DP` in `core/Gesture.kt`, and
   `DRAG_STEP_DP`, `DRAG_SLOW_DP_S`, `DRAG_FAST_DP_S`, `DRAG_GAIN_MAX`,
-  `DRAG_SMOOTH_MS`, `DRAG_FLICK_MS`, `DRAG_EDGE_DP`, `DRAG_EDGE_RATE_MAX`
+  `DRAG_SMOOTH_MS`, `DRAG_FLICK_MS`, `DRAG_EDGE_DP`, `DRAG_EDGE_RATE_START`,
+  `DRAG_EDGE_RATE_MAX`, `DRAG_EDGE_RAMP_MS`
   in `core/Touches.kt`. Martin expects to tune these; a settings screen
   (Phase 8) could expose them.
 - **Selection toolbar** after an enter drag uses a `SelectRangeGesture`
@@ -97,12 +98,12 @@ when Martin asks, or fold them into Phase 8 where they fit.
   invalidated in `onUpdateSelection` when the cursor moves elsewhere.
 - Sideways drags work like trackpad pointer acceleration (`DragGain`):
   the first step comes as the drag starts, a drag lifted within
-  `DRAG_FLICK_MS` stops there, and otherwise it moves only while the
-  finger does, one cluster per few dp when slow and many per dp when
+  `DRAG_FLICK_MS` takes back all but that step, and otherwise it moves
+  only while the finger does, one cluster per few dp when slow and many per dp when
   fast. Reach is 2000 chars either way of where the drag started
   (`WINDOW` in the service). Past what the finger can cover, holding it
-  in the strip at the keyboard's edge keeps the drag going, faster the
-  deeper in (`DragEdge`).
+  in the strip at the keyboard's edge keeps the drag going like key
+  repeat, faster the longer it stays (`DragEdge`).
 - The left space moves the cursor and enter extends a selection from it
   (`␣:move`, `⏎:select` in the layout). The right space scrubs like the
   letters, so a backspace drag that lands on it still deletes.

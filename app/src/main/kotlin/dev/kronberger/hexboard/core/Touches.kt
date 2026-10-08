@@ -34,8 +34,14 @@ const val DRAG_SMOOTH_MS = 30f
 /** Width of the strip at either side of the keyboard where a held drag keeps going. */
 const val DRAG_EDGE_DP = 40f
 
-/** Speed of a drag pressed all the way to the keyboard's edge, in clusters per second. */
-const val DRAG_EDGE_RATE_MAX = 120f
+/** Speed of a drag that just reached the edge strip, in clusters per second. */
+const val DRAG_EDGE_RATE_START = 10f
+
+/** Speed of a drag held in the edge strip for [DRAG_EDGE_RAMP_MS] or longer. */
+const val DRAG_EDGE_RATE_MAX = 150f
+
+/** How long a drag held in the edge strip takes to reach [DRAG_EDGE_RATE_MAX]. */
+const val DRAG_EDGE_RAMP_MS = 2000f
 
 /**
  * How far a sideways drag goes per pixel of finger travel, like pointer
@@ -60,12 +66,22 @@ class DragGain(
 
 /**
  * Keeps a drag going once the finger runs out of room: inside the last
- * [zonePx] before the keyboard's edge it moves on by itself, faster the
- * deeper in, up to [maxPerS] at the edge.
+ * [zonePx] before the keyboard's edge it moves on by itself, like key
+ * repeat. It starts at [startPerS] and speeds up the longer the finger
+ * stays, reaching [maxPerS] after [rampMs]. Where in the strip the finger
+ * sits does not matter; a fingertip is about as wide as the strip.
  */
-class DragEdge(val zonePx: Float, private val maxPerS: Float) {
-    /** Clusters per second at [depth], from 0 at the strip's inner side to 1 at the edge. */
-    fun speed(depth: Float): Float = maxPerS * depth * depth
+class DragEdge(
+    val zonePx: Float,
+    private val startPerS: Float,
+    private val maxPerS: Float,
+    private val rampMs: Float,
+) {
+    /** Clusters per second after [heldMs] in the strip. */
+    fun speed(heldMs: Long): Float {
+        val t = (heldMs / rampMs).coerceIn(0f, 1f)
+        return startPerS + (maxPerS - startPerS) * t * t
+    }
 }
 
 /**
@@ -82,9 +98,9 @@ class DragEdge(val zonePx: Float, private val maxPerS: Float) {
  * its [Sideways] drag. Which of the four is fixed when the finger first
  * passes the threshold, so an up swipe that drifts left stays up.
  *
- * A sideways drag moves one cluster as it starts. Whatever follows in the
- * first [flickMs] is held back and dropped if the finger lifts by then,
- * so a quick flick moves exactly one. From there the drag moves only
+ * A sideways drag moves one cluster as it starts. If the finger lifts
+ * within [flickMs], whatever followed is taken back, so a quick flick
+ * moves exactly one. From there the drag moves only
  * while the finger does, by [gain] for the finger's speed: slow for fine
  * work, fast to cover distance. Moving back at the same speed undoes the
  * same amount. Where the finger runs out of room, [edge] carries on, which
@@ -123,8 +139,12 @@ class Touches(
         /** Up to when the edge has pushed the drag. */
         var pushedMs = 0L
 
-        /** Clusters moved during the flick window, not yet reported. */
-        var held = 0
+        /** Which edge strip the finger is in, -1 left, 1 right, 0 none, and since when. */
+        var edgeSide = 0
+        var edgeSinceMs = 0L
+
+        /** Clusters reported after the first step, taken back if it was a flick. */
+        var moved = 0
 
         /** Smoothed finger speed in px/s while dragging. */
         var speed = 0f
@@ -191,6 +211,8 @@ class Touches(
         t.startMs = timeMs
         t.seenMs = timeMs
         t.pushedMs = timeMs
+        t.edgeSide = side(t)
+        t.edgeSinceMs = timeMs
         return listOf(TouchEvent.Act(KeyAction.DragBy(drag, firstStep(drag, way))))
     }
 
@@ -206,8 +228,12 @@ class Touches(
             t.seenMs = max(t.seenMs, timeMs)
         }
         t.lastX = x
-        // The edge only pushes from the moment the finger is in it.
-        if (push(t) == 0f) t.pushedMs = timeMs
+        val side = side(t)
+        if (side != t.edgeSide) {
+            t.edgeSide = side
+            t.edgeSinceMs = timeMs
+            t.pushedMs = timeMs
+        }
         t.carry += forward(drag, dx) * gain.at(t.speed)
         return report(t, drag)
     }
@@ -216,9 +242,10 @@ class Touches(
     fun tick(nowMs: Long): List<TouchEvent> = active.mapNotNull { t ->
         val drag = t.drag ?: return@mapNotNull null
         t.seenMs = max(t.seenMs, nowMs)
+        if (t.edgeSide == 0) return@mapNotNull null
         val seconds = (nowMs - t.pushedMs) / 1000f
         t.pushedMs = nowMs
-        t.carry += forward(drag, push(t) * seconds)
+        t.carry += forward(drag, t.edgeSide * edge.speed(nowMs - t.edgeSinceMs) * seconds)
         report(t, drag)
     }
 
@@ -226,33 +253,27 @@ class Touches(
     private fun forward(drag: Drag, dx: Float) = if (drag == Drag.SCRUB) -dx else dx
 
     /**
-     * Signed clusters per second the edge pushes [t] rightwards. The strip
-     * only counts once the finger is past the threshold towards that edge,
-     * so a key that starts inside it does not run off on its own.
+     * The edge strip [t]'s finger is in: -1 left, 1 right, 0 neither. A
+     * strip only counts once the finger is past the threshold towards
+     * that edge, so a key that starts inside it does not run off on its own.
      */
-    private fun push(t: Touch): Float {
+    private fun side(t: Touch): Int {
         val rightIn = max(right - edge.zonePx, t.x + thresholdPx)
-        if (t.lastX > rightIn && rightIn < right) {
-            return edge.speed(((t.lastX - rightIn) / (right - rightIn)).coerceAtMost(1f))
-        }
+        if (t.lastX > rightIn && rightIn < right) return 1
         val leftIn = min(left + edge.zonePx, t.x - thresholdPx)
-        if (t.lastX < leftIn && leftIn > left) {
-            return -edge.speed(((leftIn - t.lastX) / (leftIn - left)).coerceAtMost(1f))
-        }
-        return 0f
+        if (t.lastX < leftIn && leftIn > left) return -1
+        return 0
     }
 
-    /** Report whole clusters of [t]'s carry, holding them back while it may be a flick. */
+    /** Report the whole clusters of [t]'s carry. */
     private fun report(t: Touch, drag: Drag): TouchEvent? {
         // Rounding keeps the remainder within half a cluster, so jitter
         // smaller than a step never flips the cursor back and forth.
         val whole = t.carry.roundToInt()
+        if (whole == 0) return null
         t.carry -= whole
-        t.held += whole
-        if (flicking(t) || t.held == 0) return null
-        val delta = t.held
-        t.held = 0
-        return TouchEvent.Act(KeyAction.DragBy(drag, delta))
+        t.moved += whole
+        return TouchEvent.Act(KeyAction.DragBy(drag, whole))
     }
 
     private fun flicking(t: Touch) = t.seenMs - t.startMs < flickMs
@@ -273,9 +294,13 @@ class Touches(
 
     private fun finished(t: Touch, x: Float, y: Float): List<TouchEvent> {
         t.drag?.let { drag ->
-            // Land where the finger lifted, even if no move event got there,
-            // unless the whole drag was a flick.
-            val last = if (flicking(t)) null else glide(t, x, t.lastMs)
+            // A flick keeps only its first step. Otherwise land where the
+            // finger lifted, even if no move event got there.
+            val last = when {
+                !flicking(t) -> glide(t, x, t.lastMs)
+                t.moved != 0 -> TouchEvent.Act(KeyAction.DragBy(drag, -t.moved))
+                else -> null
+            }
             return listOfNotNull(last, TouchEvent.Act(KeyAction.DragEnd(drag)))
         }
         val dx = x - t.x

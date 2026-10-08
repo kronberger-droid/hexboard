@@ -23,7 +23,8 @@ class TouchesTest {
     // up to eleven times that at 1100px/s. No smoothing, so each move's
     // speed is exactly its own.
     private val gain = DragGain(stepPx = 10f, slowPxPerS = 100f, fastPxPerS = 1100f, maxGain = 11f, smoothMs = 0f)
-    private val edge = DragEdge(zonePx = 100f, maxPerS = 100f)
+    // Edge strips start at 10 clusters/s and reach 110/s after a second held.
+    private val edge = DragEdge(zonePx = 100f, startPerS = 10f, maxPerS = 110f, rampMs = 1000f)
     private fun touches(flickMs: Long = 0) = Touches(thresholdPx = 50f, gain = gain, flickMs = flickMs, edge = edge)
 
     // A keyboard 1000px wide with edge strips of 100px, and a flat gain of
@@ -128,33 +129,40 @@ class TouchesTest {
         val t = touches(flickMs = 150)
         t.down(0, a, 500f, 0f, emptyMap())
         assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 445f, 0f, timeMs = 0))
-        assertEquals(none, t.move(0, 345f, 0f, timeMs = 50))
-        assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 300f, 0f))
+        // It moves live, so there is no stall after the first step...
+        assertEquals(listOf(by(Drag.SCRUB, 110)), t.move(0, 345f, 0f, timeMs = 50))
+        // ...and lifting this soon takes all but the first step back.
+        assertEquals(listOf(by(Drag.SCRUB, -110), end(Drag.SCRUB)), t.up(0, 300f, 0f))
     }
 
     @Test
-    fun dragOutlastingTheFlickWindowCatchesUp() {
+    fun dragOutlastingTheFlickWindowKeepsWhatItMoved() {
         val t = touches(flickMs = 150)
         t.down(0, a, 500f, 0f, emptyMap())
         t.move(0, 445f, 0f, timeMs = 0)
-        assertEquals(none, t.move(0, 345f, 0f, timeMs = 50))
-        assertEquals(listOf(by(Drag.SCRUB, 111)), t.move(0, 335f, 0f, timeMs = 150))
+        assertEquals(listOf(by(Drag.SCRUB, 110)), t.move(0, 345f, 0f, timeMs = 50))
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 335f, 0f, timeMs = 150))
         assertEquals(listOf(by(Drag.SCRUB, 1), end(Drag.SCRUB)), t.up(0, 325f, 0f))
     }
 
     @Test
-    fun holdingInTheEdgeStripKeepsGoingFasterDeeperIn() {
+    fun holdingInTheEdgeStripKeepsGoingFasterTheLongerItStays() {
         val t = edged()
         t.down(0, a, 500f, 0f, emptyMap())
         t.move(0, 445f, 0f, timeMs = 0)
         assertEquals(listOf(by(Drag.SCRUB, 30)), t.move(0, 145f, 0f, timeMs = 400))
         assertEquals(listOf(by(Drag.SCRUB, 10)), t.move(0, 45f, 0f, timeMs = 500))
-        // 55% of the way in: 30.25 clusters/s while held still.
-        assertEquals(listOf(by(Drag.SCRUB, 30)), t.tick(1400))
-        assertEquals(listOf(by(Drag.SCRUB, 6)), t.tick(1600))
-        // Back out of the strip, it stops.
-        assertEquals(listOf(by(Drag.SCRUB, -10)), t.move(0, 145f, 0f, timeMs = 1700))
+        // 100ms in: 11 clusters/s. A second in: 110/s.
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.tick(600))
+        assertEquals(listOf(by(Drag.SCRUB, 99)), t.tick(1500))
+        // Deeper in changes nothing.
+        assertEquals(listOf(by(Drag.SCRUB, 4)), t.move(0, 5f, 0f, timeMs = 1500))
+        assertEquals(listOf(by(Drag.SCRUB, 11)), t.tick(1600))
+        // Out of the strip it stops; back in, it starts slow again.
+        assertEquals(listOf(by(Drag.SCRUB, -14)), t.move(0, 145f, 0f, timeMs = 1700))
         assertEquals(none, t.tick(2700))
+        assertEquals(listOf(by(Drag.SCRUB, 10)), t.move(0, 45f, 0f, timeMs = 2800))
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.tick(2900))
     }
 
     @Test
@@ -165,16 +173,17 @@ class TouchesTest {
         assertEquals(none, t.tick(1000))
         // The strip starts a threshold right of the key, at 970.
         assertEquals(listOf(by(Drag.SELECT, 13)), t.move(0, 995f, 0f, timeMs = 1000))
-        assertEquals(listOf(by(Drag.SELECT, 35)), t.tick(1500))
+        assertEquals(listOf(by(Drag.SELECT, 1)), t.tick(1100))
     }
 
     @Test
-    fun heldFlickTravelIsReleasedWhileWaitingAtTheEdge() {
+    fun swipingIntoTheEdgeAndHoldingIsNoFlick() {
         val t = edged(flickMs = 150)
         t.down(0, a, 500f, 0f, emptyMap())
         t.move(0, 445f, 0f, timeMs = 0)
-        assertEquals(none, t.move(0, 45f, 0f, timeMs = 50))
-        assertEquals(listOf(by(Drag.SCRUB, 72)), t.tick(1050))
+        assertEquals(listOf(by(Drag.SCRUB, 40)), t.move(0, 45f, 0f, timeMs = 50))
+        assertEquals(listOf(by(Drag.SCRUB, 110)), t.tick(1050))
+        assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 45f, 0f))
     }
 
     @Test
