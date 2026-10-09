@@ -28,15 +28,17 @@ class TouchesTest {
     // speed is exactly its own.
     private val gain = DragGain(stepPx = 10f, slowPxPerS = 100f, fastPxPerS = 1100f, maxGain = 11f, smoothMs = 0f)
     // Edge strips start at 10 clusters/s and reach 110/s after a second held.
+    // Held delete repeats from 10/s up to 110/s after a second.
+    private val repeat = Ramp(startPerS = 10f, maxPerS = 110f, rampMs = 1000f)
     private val edge = DragEdge(zonePx = 100f, startPerS = 10f, maxPerS = 110f, rampMs = 1000f)
     // Flicks, where tested, are drags faster than 300px/s lifted within 150ms.
     // Long presses fire after 300ms.
-    private fun touches(flickMs: Long = 0) = Touches(50f, gain, flickMs, flickPxPerS = 300f, edge = edge, holdMs = 300)
+    private fun touches(flickMs: Long = 0) = Touches(50f, gain, flickMs, flickPxPerS = 300f, edge = edge, holdMs = 300, repeat = repeat)
 
     // A keyboard 1000px wide with edge strips of 100px, and a flat gain of
     // one cluster per 10px so only the edge changes speed.
     private fun edged(flickMs: Long = 0) =
-        Touches(50f, DragGain(10f, 1e6f, 2e6f, 1f, 0f), flickMs, 300f, edge, holdMs = 300).also { it.span(0f, 1000f) }
+        Touches(50f, DragGain(10f, 1e6f, 2e6f, 1f, 0f), flickMs, 300f, edge, holdMs = 300, repeat = repeat).also { it.span(0f, 1000f) }
 
     private fun press(key: Key, g: Gesture = tap) = TouchEvent.Press(key, g)
     private fun by(drag: Drag, delta: Int) = TouchEvent.Act(KeyAction.DragBy(drag, delta))
@@ -362,6 +364,38 @@ class TouchesTest {
         assertEquals(listOf(press(o, Gesture.Swipe(Direction.UP))), t.up(1, 21f, -56f))
         t.down(2, o, 0f, 0f, emptyMap())
         assertEquals(listOf(by(Drag.RECALL, 1)), t.move(2, 56f, -21f, timeMs = 0))
+    }
+
+    @Test
+    fun holdingDeleteRepeatsFasterTheLongerItIsHeld() {
+        val t = touches()
+        t.down(0, del, 0f, 0f, emptyMap(), timeMs = 1000)
+        assertTrue(t.ticking)
+        assertEquals(none, t.tick(1299))
+        assertEquals(listOf(press(del)), t.tick(1300))
+        // 100ms in: 11/s.
+        assertEquals(listOf(press(del)), t.tick(1400))
+        // A second in: 110/s for 0.9s, plus what was owed.
+        assertEquals(99, t.tick(2300).size)
+        assertEquals(none, t.move(0, -80f, 0f, timeMs = 2300))
+        assertEquals(none, t.up(0, -80f, 0f))
+    }
+
+    @Test
+    fun anotherFingerStopsTheRepeat() {
+        val t = touches()
+        t.down(0, del, 0f, 0f, emptyMap(), timeMs = 1000)
+        t.tick(1300)
+        assertEquals(none, t.down(1, a, 100f, 0f, mapOf(0 to Point(0f, 0f)), timeMs = 1350))
+        assertEquals(none, t.tick(2000))
+    }
+
+    @Test
+    fun deleteLiftedBeforeTheDelayIsOneTap() {
+        val t = touches()
+        t.down(0, del, 0f, 0f, emptyMap(), timeMs = 1000)
+        assertEquals(listOf(press(del)), t.up(0, 0f, 0f))
+        assertEquals(none, t.tick(2000))
     }
 
     @Test

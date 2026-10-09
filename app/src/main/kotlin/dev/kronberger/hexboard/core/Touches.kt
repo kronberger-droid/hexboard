@@ -107,18 +107,30 @@ class DragGain(
  * stays, reaching [maxPerS] after [rampMs]. Where in the strip the finger
  * sits does not matter; a fingertip is about as wide as the strip.
  */
-class DragEdge(
-    val zonePx: Float,
-    private val startPerS: Float,
-    private val maxPerS: Float,
-    private val rampMs: Float,
-) {
+class DragEdge(val zonePx: Float, startPerS: Float, maxPerS: Float, rampMs: Float) {
+    private val ramp = Ramp(startPerS, maxPerS, rampMs)
+
     /** Clusters per second after [heldMs] in the strip. */
+    fun speed(heldMs: Long): Float = ramp.speed(heldMs)
+}
+
+/** A rate that starts at [startPerS] and eases up to [maxPerS] over [rampMs], like key repeat. */
+class Ramp(private val startPerS: Float, private val maxPerS: Float, private val rampMs: Float) {
+    /** Per second, [heldMs] after it started. */
     fun speed(heldMs: Long): Float {
         val t = (heldMs / rampMs).coerceIn(0f, 1f)
         return startPerS + (maxPerS - startPerS) * t * t
     }
 }
+
+/** Deletes per second as a held delete key starts repeating. */
+const val REPEAT_RATE_START = 10f
+
+/** Deletes per second once a delete key has been held for [REPEAT_RAMP_MS]. */
+const val REPEAT_RATE_MAX = 40f
+
+/** How long a held delete key takes to reach [REPEAT_RATE_MAX]. */
+const val REPEAT_RAMP_MS = 2000f
 
 /**
  * Tracks every finger on the keyboard by pointer id and turns them into
@@ -138,8 +150,9 @@ class DragEdge(
  * [flickMs] was a flick and keeps only that one. Until then, moves made
  * faster than [flickPxPerS] are held back, so a flick shows nothing more,
  * while slower ones show at once and are taken back if it was a flick
- * after all. From there the drag moves only while the finger does, by [gain] for the finger's speed: slow for fine
- * work, fast to cover distance. Moving back at the same speed undoes the
+ * after all. From there the drag moves only while the finger does, by
+ * [gain] for the finger's speed: slow for fine work, fast to cover
+ * distance. Moving back at the same speed undoes the
  * same amount. Where the finger runs out of room, [edge] carries on, which
  * the caller drives with [tick] every frame while [dragging]. A drag is
  * never finished early by another finger, and fingers landing while it
@@ -147,7 +160,9 @@ class DragEdge(
  *
  * A finger resting on a key with a [Key.longPress] for [holdMs], without
  * passing the threshold, is finished there with [Gesture.Hold], also from
- * [tick]; lifting it later does nothing more.
+ * [tick]; lifting it later does nothing more. One resting as long on a key
+ * that [Key.repeats] starts tapping it from [tick], at the [repeat] rate,
+ * until it lifts or another finger lands.
  */
 class Touches(
     private val thresholdPx: Float,
@@ -156,6 +171,7 @@ class Touches(
     private val flickPxPerS: Float,
     private val edge: DragEdge,
     private val holdMs: Long,
+    private val repeat: Ramp,
 ) {
     /** Horizontal extent of the keyboard the finger can reach, in px. */
     private var left = Float.NEGATIVE_INFINITY
@@ -203,6 +219,11 @@ class Touches(
 
         /** Clusters moved but not yet reported, within half a cluster of zero. */
         var carry = 0f
+
+        /** Whether the key repeats by now, when it last did, and taps owed. */
+        var repeating = false
+        var repeatedMs = 0L
+        var owed = 0f
     }
 
     /** Fingers still down, oldest first. */
@@ -211,12 +232,15 @@ class Touches(
     /** No finger is down. */
     val idle get() = active.isEmpty()
 
-    /** Whether [tick] has work to do: a drag running or a long press pending. */
-    val ticking get() = active.any { it.drag != null || holding(it) }
+    /** Whether [tick] has work to do: a drag running, a long press or a key repeat pending. */
+    val ticking get() = active.any { it.drag != null || holding(it) || resting(it) }
 
-    private fun holding(t: Touch) = t.key.longPress != null && t.drag == null && t.way == null
+    /** Still, short of the threshold: nothing decided yet. */
+    private fun still(t: Touch) = t.drag == null && t.way == null
 
-    /** The four-way direction of a displacement, or null below the threshold. */
+    private fun holding(t: Touch) = t.key.longPress != null && still(t)
+
+    private fun resting(t: Touch) = t.key.repeats && still(t)
     /**
      * The direction of a displacement on [key], or null below the threshold.
      * A key with a long press also reads up-right, from 30° to 65° right of
@@ -270,6 +294,7 @@ class Touches(
     fun move(id: Int, x: Float, y: Float, timeMs: Long): List<TouchEvent> {
         val t = active.find { it.id == id } ?: return emptyList()
         if (t.drag != null) return listOfNotNull(glide(t, x, timeMs))
+        if (t.repeating) return emptyList()
         val (prevX, prevMs, sampled) = Triple(t.lastX, t.lastMs, t.sampled)
         t.lastX = x
         t.lastMs = timeMs
@@ -317,13 +342,30 @@ class Touches(
 
     /**
      * Bring every finger up to [nowMs]: finish long presses that are due,
-     * push drags whose finger sits in an edge strip, and release what a
-     * drag held back once it is no flick.
+     * repeat held keys, push drags whose finger sits in an edge strip, and
+     * release what a drag held back once it is no flick.
      */
     fun tick(nowMs: Long): List<TouchEvent> {
         val held = active.filter { holding(it) && nowMs - it.downMs >= holdMs }
         active.removeAll(held)
-        return held.map { TouchEvent.Press(it.key, Gesture.Hold) } + active.mapNotNull { t -> push(t, nowMs) }
+        return held.map { TouchEvent.Press(it.key, Gesture.Hold) } +
+            active.flatMap { t -> repeated(t, nowMs) } +
+            active.mapNotNull { t -> push(t, nowMs) }
+    }
+
+    /** Taps [t]'s key owes by [nowMs]: the first when the delay is up, then at the [repeat] rate. */
+    private fun repeated(t: Touch, nowMs: Long): List<TouchEvent> {
+        if (!t.repeating) {
+            if (!resting(t) || nowMs - t.downMs < holdMs) return emptyList()
+            t.repeating = true
+            t.owed = 1f
+        } else {
+            t.owed += repeat.speed(nowMs - t.downMs - holdMs) * (nowMs - t.repeatedMs) / 1000f
+        }
+        t.repeatedMs = nowMs
+        val n = t.owed.toInt()
+        t.owed -= n
+        return List(n) { TouchEvent.Press(t.key, Gesture.Tap) }
     }
 
     private fun push(t: Touch, nowMs: Long): TouchEvent? {
@@ -393,6 +435,8 @@ class Touches(
     }
 
     private fun finished(t: Touch, x: Float, y: Float): List<TouchEvent> {
+        // A repeating key already did its work.
+        if (t.repeating) return emptyList()
         t.drag?.let { drag ->
             // A flick keeps only its first step. Otherwise land where the
             // finger lifted, even if no move event got there.

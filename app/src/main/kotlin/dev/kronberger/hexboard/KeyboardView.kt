@@ -25,6 +25,10 @@ import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
 import dev.kronberger.hexboard.core.Settings
 import dev.kronberger.hexboard.core.ShiftState
 import dev.kronberger.hexboard.core.Point
+import dev.kronberger.hexboard.core.REPEAT_RAMP_MS
+import dev.kronberger.hexboard.core.REPEAT_RATE_MAX
+import dev.kronberger.hexboard.core.REPEAT_RATE_START
+import dev.kronberger.hexboard.core.Ramp
 import dev.kronberger.hexboard.core.DRAG_EDGE_DP
 import dev.kronberger.hexboard.core.DRAG_EDGE_RAMP_MS
 import dev.kronberger.hexboard.core.DRAG_EDGE_RATE_MAX
@@ -93,6 +97,7 @@ class KeyboardView(
         DRAG_FLICK_DP_S * density,
         DragEdge(DRAG_EDGE_DP * density, DRAG_EDGE_RATE_START, edgeRate, DRAG_EDGE_RAMP_MS),
         longPressMs,
+        Ramp(REPEAT_RATE_START, REPEAT_RATE_MAX, REPEAT_RAMP_MS),
     )
 
     /** Take up the user's settings; called whenever the keyboard opens. */

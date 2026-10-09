@@ -58,7 +58,8 @@ data class Face(val label: String, val action: KeyAction)
  * with alternates reads six swipe directions and has no [sideways] drag;
  * every other key reads four, with left and right given by [sideways].
  * [longPress] is the text a finger resting on the key, or swiping it
- * up-right, types instead.
+ * up-right, types instead. A key that [repeats] keeps tapping while a
+ * finger rests on it.
  */
 data class Key(
     val pos: Axial,
@@ -68,6 +69,7 @@ data class Key(
     val alternates: Map<Direction, String> = emptyMap(),
     val sideways: Sideways? = if (alternates.isEmpty()) Sideways.EDIT else null,
     val longPress: String? = null,
+    val repeats: Boolean = face.action == KeyAction.Delete,
 )
 
 class Layout(val keys: List<Key>) {
