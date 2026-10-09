@@ -9,6 +9,7 @@ import android.graphics.RectF
 import android.os.Build
 import android.os.SystemClock
 import android.view.HapticFeedbackConstants
+import android.view.ViewConfiguration
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
@@ -46,6 +47,7 @@ import dev.kronberger.hexboard.core.TouchEvent
 import dev.kronberger.hexboard.core.Touches
 import dev.kronberger.hexboard.core.coalesce
 import dev.kronberger.hexboard.core.keyboardHeightPx
+import kotlin.math.hypot
 
 /** Draws [keyboard]'s layout as a honeycomb and reports resolved actions to [onAction]. */
 class KeyboardView(
@@ -330,9 +332,69 @@ class KeyboardView(
         canvas.drawText(text, x, baseline, paint)
     }
 
+    /** What an editor showing this keyboard hears instead of typing. */
+    interface Edits {
+        fun tapped(key: Key)
+        fun swapped(from: Key, to: Key)
+    }
+
+    /** Set, the keyboard types nothing: a tap picks a key, a long press drags it onto another. */
+    var edits: Edits? = null
+
+    private var editFrom: Key? = null
+    private var editDragging = false
+    private var editDownX = 0f
+    private var editDownY = 0f
+    private val slop = ViewConfiguration.get(context).scaledTouchSlop
+    private val startEditDrag = Runnable {
+        if (editFrom != null) {
+            editDragging = true
+            haptic(HapticFeedbackConstants.LONG_PRESS)
+        }
+    }
+
+    private fun editTouch(event: MotionEvent, g: HexGrid, edits: Edits): Boolean {
+        val over = layout.keyAt(g, event.x, event.y)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                editFrom = over
+                editDragging = false
+                editDownX = event.x
+                editDownY = event.y
+                postDelayed(startEditDrag, ViewConfiguration.getLongPressTimeout().toLong())
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (!editDragging && hypot(event.x - editDownX, event.y - editDownY) > slop) removeCallbacks(startEditDrag)
+            }
+            MotionEvent.ACTION_UP -> {
+                removeCallbacks(startEditDrag)
+                val from = editFrom
+                when {
+                    from == null -> Unit
+                    editDragging -> if (over != null && over != from) edits.swapped(from, over)
+                    hypot(event.x - editDownX, event.y - editDownY) <= slop -> edits.tapped(from)
+                }
+                editFrom = null
+                editDragging = false
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(startEditDrag)
+                editFrom = null
+                editDragging = false
+            }
+        }
+        // Light the key being dragged and the one it would trade places with.
+        pressed.clear()
+        editFrom?.let { pressed[0] = it }
+        if (editDragging) over?.let { pressed[1] = it }
+        invalidate()
+        return true
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         ensureBuilt()
         val g = grid ?: return false
+        edits?.let { return editTouch(event, g, it) }
         val i = event.actionIndex
         val id = event.getPointerId(i)
         val out = mutableListOf<TouchEvent>()

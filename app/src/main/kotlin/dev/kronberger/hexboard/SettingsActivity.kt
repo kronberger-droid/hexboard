@@ -104,7 +104,7 @@ class SettingsActivity : Activity() {
                 listOf(
                     choiceRow(Settings.theme),
                     look.row("Keymap", "Layout, long presses and swipes", look.chevron()) {
-                        startActivity(Intent(this, KeymapActivity::class.java))
+                        startActivity(Intent(this, KeymapEditorActivity::class.java))
                     },
                 ),
             ),

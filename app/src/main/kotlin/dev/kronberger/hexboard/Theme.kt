@@ -2,6 +2,7 @@ package dev.kronberger.hexboard
 
 import android.content.res.Configuration
 import android.content.res.Resources
+import dev.kronberger.hexboard.core.Settings
 import dev.kronberger.hexboard.core.blend
 import dev.kronberger.hexboard.core.lightness
 
@@ -68,4 +69,18 @@ data class Palette(
             return if (night == Configuration.UI_MODE_NIGHT_YES) DARK else LIGHT
         }
     }
+}
+
+/** The palette the user's theme setting asks for. */
+fun paletteFor(prefs: Prefs, resources: Resources): Palette = when (prefs[Settings.theme]) {
+    1 -> Palette.LIGHT
+    2 -> Palette.DARK
+    3 -> Palette.custom(
+        prefs[Settings.background],
+        prefs[Settings.keyColor],
+        prefs[Settings.labelColor],
+        prefs[Settings.spaceColor],
+        prefs[Settings.enterColor],
+    )
+    else -> Palette.of(resources)
 }

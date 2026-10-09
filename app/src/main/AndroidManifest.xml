@@ -34,6 +34,12 @@
         </activity>
 
         <activity
+            android:name=".KeymapEditorActivity"
+            android:label="Keymap"
+            android:theme="@style/SettingsTheme"
+            android:exported="false" />
+
+        <activity
             android:name=".KeymapActivity"
             android:label="Keymap"
             android:theme="@style/SettingsTheme"

@@ -151,20 +151,7 @@ class HexboardService : InputMethodService() {
         }
         showEmoji(false)
         view?.configure(prefs)
-        applyPalette(
-            when (prefs[Settings.theme]) {
-                1 -> Palette.LIGHT
-                2 -> Palette.DARK
-                3 -> Palette.custom(
-                    prefs[Settings.background],
-                    prefs[Settings.keyColor],
-                    prefs[Settings.labelColor],
-                    prefs[Settings.spaceColor],
-                    prefs[Settings.enterColor],
-                )
-                else -> Palette.of(resources)
-            },
-        )
+        applyPalette(paletteFor(prefs, resources))
         updateCaps()
     }
 
