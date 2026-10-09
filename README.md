@@ -15,6 +15,8 @@ libraries.
 - Drag the left space to move the cursor, or enter to select.
 - Symbols layer, an emoji panel with recents, and enter that follows the
   text field's action.
+- Keymaps as text, with presets: rearrange both layers and give any key
+  a long press and diagonal swipes (Settings, Edit keymap).
 
 ## Building
 

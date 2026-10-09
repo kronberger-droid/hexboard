@@ -6,7 +6,13 @@ enum class ShiftState { OFF, ONCE, LOCKED }
  * Turns gestures on keys into actions, keeping the keyboard's state in
  * between: shift, and whether [letters] or [symbols] is showing.
  */
-class Keyboard(private val letters: Layout, private val symbols: Layout = letters) {
+class Keyboard(private var letters: Layout, private var symbols: Layout = letters) {
+
+    /** Use another keymap's layers from now on. */
+    fun setLayouts(letters: Layout, symbols: Layout) {
+        this.letters = letters
+        this.symbols = symbols
+    }
 
     var shift = ShiftState.OFF
         private set

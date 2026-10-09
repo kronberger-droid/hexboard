@@ -8,6 +8,7 @@ import android.inputmethodservice.InputMethodService
 import android.os.Build
 import android.os.SystemClock
 import android.text.InputType
+import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsetsController
@@ -21,6 +22,7 @@ import dev.kronberger.hexboard.core.Cursor
 import dev.kronberger.hexboard.core.Drag
 import dev.kronberger.hexboard.core.KeyAction
 import dev.kronberger.hexboard.core.Keyboard
+import dev.kronberger.hexboard.core.Keymaps
 import dev.kronberger.hexboard.core.Layouts
 import dev.kronberger.hexboard.core.Recall
 import dev.kronberger.hexboard.core.Settings
@@ -82,6 +84,10 @@ class HexboardService : InputMethodService() {
     private var travel: Travel? = null
 
     private val keyboard = Keyboard(Layouts.english, Layouts.symbols)
+
+    /** The keymap text the keyboard's layers were last built from. */
+    private var loadedKeymap: String? = null
+    private var keymapLoaded = false
     private val prefs by lazy { Prefs.of(this) }
     private var view: KeyboardView? = null
     private var emojiPanel: EmojiPanelView? = null
@@ -121,6 +127,7 @@ class HexboardService : InputMethodService() {
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        loadKeymap()
         // Numbers, phone numbers and dates start on the layer with digits.
         keyboard.showingSymbols = when (info.inputType and InputType.TYPE_MASK_CLASS) {
             InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> true
@@ -155,6 +162,23 @@ class HexboardService : InputMethodService() {
             val light = WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
             window.window?.insetsController?.setSystemBarsAppearance(if (p.light) light else 0, light)
         }
+    }
+
+    /**
+     * Use the stored keymap, parsing it only when its text changed. One that
+     * fails to parse, which the editor never saves, falls back to the default.
+     */
+    private fun loadKeymap() {
+        val text = prefs.keymap
+        if (keymapLoaded && text == loadedKeymap) return
+        keymapLoaded = true
+        loadedKeymap = text
+        val keymap = text?.let {
+            runCatching { Keymaps.parse(it) }
+                .onFailure { e -> Log.w("Hexboard", "stored keymap rejected, using the default: ${e.message}") }
+                .getOrNull()
+        }
+        keyboard.setLayouts(keymap?.letters ?: Layouts.english, keymap?.symbols ?: Layouts.symbols)
     }
 
     /** Shift for a capital when the editor expects one, e.g. at a sentence start. */
@@ -255,6 +279,8 @@ class HexboardService : InputMethodService() {
         if (!prefs[Settings.doubleSpace] || !cursor.known || cursor.start != cursor.end) return false
         val variation = (currentInputEditorInfo?.inputType ?: 0) and InputType.TYPE_MASK_VARIATION
         if (variation in NO_PERIOD_VARIATIONS) return false
+        // Fields that ask for no suggestions want their text as typed.
+        if ((currentInputEditorInfo?.inputType ?: 0) and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS != 0) return false
         val before = ic.getTextBeforeCursor(2, 0) ?: return false
         if (!periodForDoubleSpace(before)) return false
         recall.clear()

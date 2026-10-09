@@ -16,6 +16,11 @@ class Prefs(val shared: SharedPreferences) {
     operator fun set(s: Slider, value: Int) = shared.edit().putInt(s.key, value).apply()
     operator fun set(c: Choice, value: Int) = shared.edit().putInt(c.key, value).apply()
 
+    /** The user's keymap text, or null for the default preset. */
+    var keymap: String?
+        get() = shared.getString("keymap", null)
+        set(value) = shared.edit().putString("keymap", value).apply()
+
     companion object {
         fun of(context: Context) = Prefs(context.getSharedPreferences("hexboard", Context.MODE_PRIVATE))
     }

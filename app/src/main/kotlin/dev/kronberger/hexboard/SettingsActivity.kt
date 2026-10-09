@@ -41,20 +41,10 @@ class SettingsActivity : Activity() {
         }
         list.addView(button("Enable Hexboard") { startActivity(Intent(SystemSettings.ACTION_INPUT_METHOD_SETTINGS)) })
         list.addView(button("Switch keyboard") { getSystemService(InputMethodManager::class.java).showInputMethodPicker() })
+        list.addView(button("Edit keymap") { startActivity(Intent(this, KeymapActivity::class.java)) })
         for (s in Settings.all) list.addView(row(s))
         val scroll = ScrollView(this).apply { addView(list) }
-        // Edge to edge from API 35: keep clear of the status and navigation bars.
-        scroll.setOnApplyWindowInsetsListener { v, insets ->
-            val (l, t, r, b) = if (Build.VERSION.SDK_INT >= 30) {
-                val i = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-                listOf(i.left, i.top, i.right, i.bottom)
-            } else {
-                @Suppress("DEPRECATION")
-                listOf(insets.systemWindowInsetLeft, insets.systemWindowInsetTop, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
-            }
-            v.setPadding(l, t, r, b)
-            insets
-        }
+        keepClearOfBars(scroll)
         setContentView(scroll)
     }
 
@@ -115,5 +105,24 @@ class SettingsActivity : Activity() {
 
     private fun View.spaced() {
         setPadding(0, (12 * dp).toInt(), 0, (12 * dp).toInt())
+    }
+}
+
+/**
+ * Pad [view] clear of the status and navigation bars and the keyboard,
+ * which an app targeting API 35 draws under otherwise.
+ */
+fun keepClearOfBars(view: View) {
+    view.setOnApplyWindowInsetsListener { v, insets ->
+        val (l, t, r, b) = if (Build.VERSION.SDK_INT >= 30) {
+            val types = WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout() or WindowInsets.Type.ime()
+            val i = insets.getInsets(types)
+            listOf(i.left, i.top, i.right, i.bottom)
+        } else {
+            @Suppress("DEPRECATION")
+            listOf(insets.systemWindowInsetLeft, insets.systemWindowInsetTop, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
+        }
+        v.setPadding(l, t, r, b)
+        insets
     }
 }
