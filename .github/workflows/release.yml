@@ -1,20 +1,23 @@
 # Builds a signed APK in the flake's devShell and publishes it as a GitHub
 # release whenever a tag like v1.2.3 is pushed. The signing key comes from
-# repository secrets; scripts/release-key.nu creates it.
+# repository secrets; scripts/release-key.nu creates it. Started by hand,
+# it builds and checks the same way but publishes nothing.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # Pinned rather than ubuntu-latest, so a runner change is our commit.
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: cachix/install-nix-action@v31
 
@@ -28,7 +31,9 @@ jobs:
             echo "::error::Signing secrets are missing; see scripts/release-key.nu"
             exit 1
           fi
-          version="${GITHUB_REF_NAME#v}"
+          # A tag names the version; a run by hand builds 0.0.0.
+          if [ "$GITHUB_REF_TYPE" = tag ]; then version="${GITHUB_REF_NAME#v}"; else version=0.0.0; fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
           export HEXBOARD_KEYSTORE="$RUNNER_TEMP/release.jks"
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$HEXBOARD_KEYSTORE"
           nix develop --command gradle --no-daemon testDebugUnitTest assembleRelease -Phexboard.version="$version"
@@ -37,6 +42,7 @@ jobs:
           rm -f "$HEXBOARD_KEYSTORE"
 
       - name: Publish
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "hexboard-${GITHUB_REF_NAME#v}.apk" --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" "hexboard-$VERSION.apk" --title "$GITHUB_REF_NAME" --generate-notes
