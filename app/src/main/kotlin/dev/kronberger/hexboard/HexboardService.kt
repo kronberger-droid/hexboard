@@ -106,7 +106,7 @@ class HexboardService : InputMethodService() {
      */
     override fun onCreateInputView(): View {
         val keys = KeyboardView(this, keyboard, ::onAction)
-        val panel = EmojiPanelView(this, lazy { emojiCatalog() }, getSharedPreferences("hexboard", MODE_PRIVATE), keys, ::onAction)
+        val panel = EmojiPanelView(this, lazy { emojiCatalog() }, prefs.shared, keys, ::onAction)
         panel.visibility = View.GONE
         view = keys
         emojiPanel = panel

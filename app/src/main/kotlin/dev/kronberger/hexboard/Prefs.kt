@@ -2,6 +2,7 @@ package dev.kronberger.hexboard
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.UserManager
 import dev.kronberger.hexboard.core.Choice
 import dev.kronberger.hexboard.core.ColorSetting
 import dev.kronberger.hexboard.core.Slider
@@ -26,6 +27,25 @@ class Prefs(val shared: SharedPreferences) {
         set(value) = shared.edit().putString("keymap", value).apply()
 
     companion object {
-        fun of(context: Context) = Prefs(context.getSharedPreferences("hexboard", Context.MODE_PRIVATE))
+        private const val NAME = "hexboard"
+
+        /** Whether preferences from before direct boot support were moved over yet. */
+        @Volatile
+        private var moved = false
+
+        /**
+         * The preferences, in device-protected storage, which is readable
+         * before the first unlock after a reboot, so the keyboard can type
+         * the PIN. Ones kept in credential storage by earlier versions move
+         * over once the user has unlocked.
+         */
+        fun of(context: Context): Prefs {
+            val device = context.createDeviceProtectedStorageContext()
+            if (!moved && context.getSystemService(UserManager::class.java).isUserUnlocked) {
+                device.moveSharedPreferencesFrom(context, NAME)
+                moved = true
+            }
+            return Prefs(device.getSharedPreferences(NAME, Context.MODE_PRIVATE))
+        }
     }
 }

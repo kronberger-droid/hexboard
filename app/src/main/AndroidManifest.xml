@@ -8,11 +8,14 @@
         android:allowBackup="false">
 
         <!-- exported is required from targetSdk 31; BIND_INPUT_METHOD keeps
-             anything but the system from binding to it. -->
+             anything but the system from binding to it. directBootAware lets
+             it type the PIN after a reboot, so it may only touch
+             device-protected storage; see Prefs. -->
         <service
             android:name=".HexboardService"
             android:label="@string/ime_name"
             android:permission="android.permission.BIND_INPUT_METHOD"
+            android:directBootAware="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.view.InputMethod" />
