@@ -66,9 +66,20 @@ class LayoutTest {
     }
 
     @Test
-    fun keysWithAlternatesHaveNoSidewaysDrag() {
-        val key = Layout.parse(listOf(",/."), alternates = mapOf(",/." to mapOf(Direction.UP_LEFT to "\""))).keys.single()
-        assertNull(key.sideways)
+    fun alternatesKeepTheDragAndFixedTakesItAway() {
+        val alts = mapOf(",/." to mapOf(Direction.UP_LEFT to "\""))
+        val (plain, fixed) = Layout.parse(listOf(",/. ,/.:fixed"), alternates = alts).keys
+        assertEquals(Sideways.EDIT, plain.sideways)
+        assertNull(fixed.sideways)
+        // Alternates are found without the suffix too.
+        assertEquals("\"", fixed.alternates[Direction.UP_LEFT])
+    }
+
+    @Test
+    fun everyKeyWithAlternatesInTheDefaultsIsFixed() {
+        for (layout in listOf(Layouts.english, Layouts.symbols)) {
+            assertTrue(layout.keys.filter { it.alternates.isNotEmpty() }.all { it.sideways == null })
+        }
     }
 
     @Test

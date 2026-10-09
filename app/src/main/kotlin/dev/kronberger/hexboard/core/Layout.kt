@@ -55,8 +55,9 @@ data class Face(val label: String, val action: KeyAction)
  * its label only and may hang off the keyboard's edge, so it is left out
  * when fitting the grid to the screen.
  * [alternates] is the text a swipe in each direction types instead. A key
- * with alternates reads six swipe directions and has no [sideways] drag;
- * every other key reads four, with left and right given by [sideways].
+ * with a [sideways] drag reads up, down, left and right, plus a narrower
+ * band for each diagonal it has an alternate for. A key without one, a
+ * fixed key, reads six equal directions instead.
  * [longPress] is the text a finger resting on the key, or swiping it
  * up-right, types instead. A key that [repeats] keeps tapping while a
  * finger rests on it.
@@ -67,7 +68,7 @@ data class Key(
     val lower: Face? = null,
     val bare: Boolean = false,
     val alternates: Map<Direction, String> = emptyMap(),
-    val sideways: Sideways? = if (alternates.isEmpty()) Sideways.EDIT else null,
+    val sideways: Sideways? = Sideways.EDIT,
     val longPress: String? = null,
     val repeats: Boolean = face.action == KeyAction.Delete,
 )
@@ -91,7 +92,7 @@ class Layout(val keys: List<Key>) {
 
     companion object {
         private const val EMPTY = "·"
-        private val MODIFIERS = mapOf(":select" to Sideways.SELECT, ":move" to Sideways.MOVE)
+        private val MODIFIERS = mapOf(":select" to Sideways.SELECT, ":move" to Sideways.MOVE, ":fixed" to null)
 
         /**
          * One string per row, keys separated by spaces. Odd rows are drawn
@@ -99,8 +100,9 @@ class Layout(val keys: List<Key>) {
          * makes a split key, and the tokens in [bare] become
          * label-only edge keys. `␣ ⌫ ⏎ ⇧ 123 abc 😊` are the function keys; any
          * other token types itself. [alternates] gives swipe outputs per
-         * token and [longPress] the text a long press types. A `:select` or
-         * `:move` suffix sets the key's sideways drag.
+         * token and [longPress] the text a long press types, looked up by the
+         * whole token first and then without its suffix. A `:select` or
+         * `:move` suffix sets the key's sideways drag; `:fixed` takes it away.
          */
         fun parse(
             rows: List<String>,
@@ -114,19 +116,15 @@ class Layout(val keys: List<Key>) {
                     val modifier = MODIFIERS.keys.firstOrNull { token.endsWith(it) && token.length > it.length }
                     val base = token.removeSuffix(modifier.orEmpty())
                     val halves = if (base.length > 1) base.split("/", limit = 2) else listOf(base)
-                    val alts = alternates[token].orEmpty()
+                    val alts = alternates[token] ?: alternates[base].orEmpty()
                     Key(
                         pos = Axial.fromRowCol(row, col),
                         face = faceFor(halves[0]),
                         lower = halves.getOrNull(1)?.let(::faceFor),
                         bare = token in bare,
                         alternates = alts,
-                        sideways = when {
-                            alts.isNotEmpty() -> null
-                            modifier != null -> MODIFIERS.getValue(modifier)
-                            else -> Sideways.EDIT
-                        },
-                        longPress = longPress[token],
+                        sideways = if (modifier != null) MODIFIERS.getValue(modifier) else Sideways.EDIT,
+                        longPress = longPress[token] ?: longPress[base],
                     )
                 }
             },
@@ -180,7 +178,7 @@ object Layouts {
         listOf(
             "· w e t y i o",
             "q a r g u l p",
-            "⇧ ,/. ␣:move f h ␣ !/? ⌫",
+            "⇧ ,/.:fixed ␣:move f h ␣ !/?:fixed ⌫",
             "z s d n m j k",
             "· x c v b 😊/123 ⏎:select",
         ),
@@ -197,10 +195,10 @@ object Layouts {
      */
     val symbols = Layout.parse(
         listOf(
-            "· ~/^ 1 2 3 4 >/<",
-            "$/€ =/+ 5 6 7 [/( ]/)",
-            "⇧ ,/. ␣:move 8 9 ␣ !/? ⌫",
-            "°/§ –/- _ 0 `/* |// ¡/¿",
+            "· ~/^ 1 2 3 4 >/<:fixed",
+            "$/€:fixed =/+ 5 6 7 [/(:fixed ]/):fixed",
+            "⇧ ,/.:fixed ␣:move 8 9 ␣ !/?:fixed ⌫",
+            "°/§ –/- _ 0 `/* |//:fixed ¡/¿",
             "· & % @ # 😊/ABC ⏎:select",
         ),
         bare = setOf("⇧", "⌫"),

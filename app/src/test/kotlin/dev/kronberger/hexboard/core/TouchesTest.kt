@@ -8,8 +8,11 @@ import org.junit.Test
 class TouchesTest {
 
     private val keys = Layout.parse(
-        listOf("a b c ⌫ ,/. ␣:select ␣:move o"),
-        alternates = mapOf(",/." to mapOf(Direction.UP_LEFT to "\"")),
+        listOf("a b c ⌫ ,/.:fixed ␣:select ␣:move o e"),
+        alternates = mapOf(
+            ",/." to mapOf(Direction.UP_LEFT to "\""),
+            "e" to mapOf(Direction.UP_LEFT to "é", Direction.DOWN_RIGHT to "è"),
+        ),
         longPress = mapOf("o" to "ö"),
     ).keys
     private val a = keys[0]
@@ -20,6 +23,7 @@ class TouchesTest {
     private val selectSpace = keys[5]
     private val moveSpace = keys[6]
     private val o = keys[7]
+    private val e = keys[8]
     private val tap = Gesture.Tap
     private val none = emptyList<TouchEvent>()
 
@@ -396,6 +400,22 @@ class TouchesTest {
         t.down(0, del, 0f, 0f, emptyMap(), timeMs = 1000)
         assertEquals(listOf(press(del)), t.up(0, 0f, 0f))
         assertEquals(none, t.tick(2000))
+    }
+
+    @Test
+    fun dragKeysReadTheDiagonalsTheyDefineAndKeepTheirDrag() {
+        val t = touches()
+        // 40° left of straight up, 40° right of straight down.
+        t.down(0, e, 0f, 0f, emptyMap())
+        assertEquals(listOf(press(e, Gesture.Swipe(Direction.UP_LEFT))), t.up(0, -64f, -77f))
+        t.down(1, e, 0f, 0f, emptyMap())
+        assertEquals(listOf(press(e, Gesture.Swipe(Direction.DOWN_RIGHT))), t.up(1, 64f, 77f))
+        // Up-right is not defined here, so 40° right of up is still up.
+        t.down(2, e, 0f, 0f, emptyMap())
+        assertEquals(listOf(press(e, Gesture.Swipe(Direction.UP))), t.up(2, 64f, -77f))
+        // Straight left still scrubs.
+        t.down(3, e, 500f, 0f, emptyMap())
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(3, 440f, 0f, timeMs = 0))
     }
 
     @Test

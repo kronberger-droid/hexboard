@@ -283,7 +283,7 @@ class KeyboardView(
                 val (ox, oy) = HINT_OFFSETS.getValue(direction)
                 drawCentered(canvas, text, c.x + ox * g.radius * 0.62f, c.y + oy * g.radius * 0.62f, hintPaint)
             }
-            key.longPress?.let { text ->
+            key.longPress?.takeIf { Direction.UP_RIGHT !in key.alternates }?.let { text ->
                 val (ox, oy) = HINT_OFFSETS.getValue(Direction.UP_RIGHT)
                 val label = keyboard.label(Face(text, KeyAction.Text(text)))
                 drawCentered(canvas, label, c.x + ox * g.radius * 0.62f, c.y + oy * g.radius * 0.62f, hintPaint)

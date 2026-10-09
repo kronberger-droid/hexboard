@@ -182,7 +182,16 @@ class Touches(
         this.right = right
     }
 
-    private enum class Way { UP, UP_RIGHT, DOWN, LEFT, RIGHT }
+    private enum class Way(val direction: Direction?) {
+        UP(Direction.UP),
+        UP_RIGHT(Direction.UP_RIGHT),
+        DOWN_RIGHT(Direction.DOWN_RIGHT),
+        DOWN(Direction.DOWN),
+        DOWN_LEFT(Direction.DOWN_LEFT),
+        UP_LEFT(Direction.UP_LEFT),
+        LEFT(null),
+        RIGHT(null),
+    }
 
     private class Touch(val id: Int, val key: Key, val x: Float, val y: Float, val downMs: Long) {
         /** Set once the finger passes the threshold; it does not change after. */
@@ -243,15 +252,25 @@ class Touches(
     private fun resting(t: Touch) = t.key.repeats && still(t)
     /**
      * The direction of a displacement on [key], or null below the threshold.
-     * A key with a long press also reads up-right, from 30° to 65° right of
-     * straight up, taking a slice of both up and right.
+     * Each diagonal the key types something on, an alternate or up-right for
+     * its long press, is read from 30° to 65° off vertical, taking a slice
+     * of both its neighbours.
      */
     private fun way(key: Key, dx: Float, dy: Float): Way? {
-        if (key.longPress != null && hypot(dx, dy) >= thresholdPx) {
-            val fromUp = atan2(dx.toDouble(), -dy.toDouble()) * 180.0 / PI
-            if (fromUp >= 30.0 && fromUp < 65.0) return Way.UP_RIGHT
+        if (hypot(dx, dy) >= thresholdPx) {
+            val fromUp = (atan2(dx.toDouble(), -dy.toDouble()) * 180.0 / PI + 360.0) % 360.0
+            for ((way, from) in BANDS) {
+                val wanted = key.alternates.containsKey(way.direction) ||
+                    (way == Way.UP_RIGHT && key.longPress != null)
+                if (wanted && fromUp >= from && fromUp < from + 35.0) return way
+            }
         }
         return way(dx, dy)
+    }
+
+    private companion object {
+        /** Each diagonal band's start, in degrees clockwise from up. */
+        val BANDS = listOf(Way.UP_RIGHT to 30.0, Way.DOWN_RIGHT to 115.0, Way.DOWN_LEFT to 210.0, Way.UP_LEFT to 295.0)
     }
 
     private fun way(dx: Float, dy: Float): Way? = when {
@@ -452,9 +471,8 @@ class Touches(
         val sideways = t.key.sideways ?: return listOf(TouchEvent.Press(t.key, classify(dx, dy, thresholdPx)))
         return when (val way = t.way ?: way(t.key, dx, dy)) {
             null -> listOf(TouchEvent.Press(t.key, Gesture.Tap))
-            Way.UP -> listOf(TouchEvent.Press(t.key, Gesture.Swipe(Direction.UP)))
-            Way.UP_RIGHT -> listOf(TouchEvent.Press(t.key, Gesture.Swipe(Direction.UP_RIGHT)))
-            Way.DOWN -> listOf(TouchEvent.Press(t.key, Gesture.Swipe(Direction.DOWN)))
+            Way.UP, Way.UP_RIGHT, Way.DOWN_RIGHT, Way.DOWN, Way.DOWN_LEFT, Way.UP_LEFT ->
+                listOf(TouchEvent.Press(t.key, Gesture.Swipe(way.direction!!)))
             // A flick too quick for any move event: one step, then done.
             Way.LEFT, Way.RIGHT -> {
                 val drag = dragFor(sideways, way)
