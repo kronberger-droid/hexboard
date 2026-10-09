@@ -46,8 +46,8 @@ when Martin asks, or fold them into Phase 8 where they fit.
   (API 34+). Unverified in Chrome and Compose text fields; if it fails
   there, the fallback is an in-keyboard cut/copy/paste bar through
   `performContextMenuAction`.
-- **Drag interplay untested:** a scrub started over an enter-drag selection
-  ignores it; recall refuses while a selection exists.
+- **Drag interplay:** a scrub started over a selection takes it as its
+  first step; recall refuses while a selection exists.
 - **Composing-text recall preview** not yet tried in a browser or Termux.
 - **Symbols:** Typewise's second symbols page (`¥?±` on its function key)
   is not built; the mark on `=/+` in its screenshot was unreadable.

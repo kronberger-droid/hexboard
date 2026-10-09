@@ -36,10 +36,12 @@ class HexboardService : InputMethodService() {
     private val recall = Recall()
 
     /**
-     * A scrub in progress: where it started, the text it can reach so far,
-     * how much is selected, and whether the editor has more text before it.
+     * A scrub in progress: the selection's end it grows back from, the text
+     * it can reach so far, how much is selected, and whether the editor has
+     * more text before it. [from] is where the selection started, the same
+     * as [cursor] unless the scrub began over one.
      */
-    private class Scrub(val cursor: Int, var before: String, var boundaries: List<Int>) {
+    private class Scrub(val cursor: Int, val from: Int, var before: String, var boundaries: List<Int>) {
         var steps = 0
         var more = before.length >= WINDOW
     }
@@ -307,18 +309,33 @@ class HexboardService : InputMethodService() {
         cursor.movedBySelf(start, s.cursor)
     }
 
+    /**
+     * A scrub over a selection starts with that selection taken, and its
+     * first step is the selection itself, so a flick deletes exactly that.
+     */
     private fun startScrub(ic: InputConnection): Scrub? {
         if (!cursor.known) return null
-        val before = ic.getTextBeforeCursor(WINDOW, 0)?.toString()
-        if (before.isNullOrEmpty()) return null
-        return Scrub(cursor.start, before, boundaries(before)).also { scrub = it }
+        val before = ic.getTextBeforeCursor(WINDOW, 0)?.toString().orEmpty()
+        val selected = if (cursor.start < cursor.end) ic.getSelectedText(0)?.toString().orEmpty() else ""
+        val text = before + selected
+        if (text.isEmpty()) return null
+        val boundaries = boundaries(text)
+        val s = Scrub(cursor.start + selected.length, cursor.start, text, boundaries)
+        val taken = boundaries.size - 1 - boundaries.indexOfFirst { it >= before.length }
+        if (taken > 0) s.steps = taken - 1
+        return s.also { scrub = it }
     }
 
     private fun scrubEnd(ic: InputConnection, keep: Boolean) {
         val s = scrub ?: return
         scrub = null
         val start = selectionStart(s)
-        if (!keep || start == s.cursor) {
+        if (!keep) {
+            ic.setSelection(s.from, s.cursor)
+            cursor.movedBySelf(s.from, s.cursor)
+            return
+        }
+        if (start == s.cursor) {
             ic.setSelection(s.cursor, s.cursor)
             cursor.movedBySelf(s.cursor)
             return
