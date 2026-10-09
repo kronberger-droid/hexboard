@@ -102,6 +102,11 @@ class KeyboardView(
 
     /** Take up the user's settings; called whenever the keyboard opens. */
     fun configure(p: Prefs) {
+        // Opening again, e.g. after switching back from another keyboard.
+        if (clearance.refresh()) {
+            applyClearance()
+            requestLayout()
+        }
         haptics = p[Settings.haptics]
         val scale = p[Settings.size] / 100f
         if (scale != sizeScale) {
@@ -171,26 +176,27 @@ class KeyboardView(
         )
     }
 
+    private val clearance = Clearance(context, "keys")
+
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
-        if (takeInsets(insets)) requestLayout()
+        if (clearance.take(insets)) {
+            applyClearance()
+            requestLayout()
+        }
         return insets
     }
 
-    /** Keep clear of [insets]; true if that changed anything. */
-    private fun takeInsets(insets: WindowInsets): Boolean {
-        val clear = keyboardInsets(insets, resources)
-        if (clear.left == insetLeft && clear.right == insetRight && clear.bottom == insetBottom) return false
+    private fun applyClearance() {
+        val clear = clearance.current
         insetLeft = clear.left
         insetRight = clear.right
         insetBottom = clear.bottom
         builtFor = null
-        return true
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        // The window's current insets, in case none were dispatched since
-        // they last changed, e.g. while the keyboard was hidden.
-        rootWindowInsets?.let(::takeInsets)
+        // In case the window's insets changed without a dispatch.
+        if (clearance.refresh()) applyClearance()
         val width = MeasureSpec.getSize(widthMeasureSpec)
         val keysWidth = (width - insetLeft - insetRight - 2 * padding).toInt()
         val keysHeight = (keyboardHeightPx(layout, keysWidth, resources.displayMetrics.heightPixels) * sizeScale).toInt()

@@ -118,21 +118,23 @@ class EmojiPanelView(
         invalidate()
     }
 
+    private val clearance = Clearance(context, "emoji")
+
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
-        takeInsets(insets)
+        if (clearance.take(insets)) applyClearance()
         invalidate()
         return insets
     }
 
-    private fun takeInsets(insets: WindowInsets) {
-        val clear = keyboardInsets(insets, resources)
+    private fun applyClearance() {
+        val clear = clearance.current
         insetLeft = clear.left
         insetRight = clear.right
         insetBottom = clear.bottom
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        rootWindowInsets?.let(::takeInsets)
+        if (clearance.refresh()) applyClearance()
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), sizeLike.measuredHeight)
     }
 

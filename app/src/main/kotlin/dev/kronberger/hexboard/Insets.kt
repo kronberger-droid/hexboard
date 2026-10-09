@@ -1,10 +1,13 @@
 package dev.kronberger.hexboard
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.res.Resources
 import android.graphics.Rect
 import android.os.Build
+import android.util.Log
 import android.view.WindowInsets
+import android.view.WindowManager
 
 /** Height of the system's IME button strip where the platform does not say (AOSP's value). */
 private const val IME_NAV_BAR_DP = 48f
@@ -41,4 +44,47 @@ fun keyboardInsets(insets: WindowInsets, resources: Resources): Rect {
     }
     val b = if (nav > 0) maxOf(nav, imeStripPx(resources)) else 0
     return Rect(l, 0, r, b)
+}
+
+/**
+ * How far a keyboard view keeps clear of the window's edges, as a [Rect]
+ * like [keyboardInsets].
+ *
+ * Dispatched insets alone are not enough: while the IME window is being
+ * attached, e.g. after switching keyboards, they can come through as zero,
+ * and no correction follows when the system thinks nothing changed. So the
+ * window manager's current insets for the window are asked as well, where
+ * available, and the larger of the two wins.
+ */
+class Clearance(private val context: Context, private val name: String) {
+    private var dispatched = Rect()
+
+    var current = Rect()
+        private set
+
+    /** Insets were dispatched to the view; true if the clearance changed. */
+    fun take(insets: WindowInsets): Boolean {
+        dispatched = keyboardInsets(insets, context.resources)
+        return refresh()
+    }
+
+    /** Ask the window manager again; true if the clearance changed. */
+    fun refresh(): Boolean {
+        val next = Rect(dispatched)
+        windowInsets()?.let { keyboardInsets(it, context.resources) }?.let { m ->
+            next.left = maxOf(next.left, m.left)
+            next.right = maxOf(next.right, m.right)
+            next.bottom = maxOf(next.bottom, m.bottom)
+        }
+        if (next == current) return false
+        Log.d("Hexboard", "$name clearance $current -> $next, dispatched $dispatched")
+        current = next
+        return true
+    }
+
+    /** The window's insets as the window manager has them now; API 31, where an IME is a window context. */
+    private fun windowInsets(): WindowInsets? {
+        if (Build.VERSION.SDK_INT < 31) return null
+        return runCatching { context.getSystemService(WindowManager::class.java)?.currentWindowMetrics?.windowInsets }.getOrNull()
+    }
 }
