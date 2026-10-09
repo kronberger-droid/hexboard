@@ -47,7 +47,9 @@ class SettingsLook(private val activity: Activity) {
         if (Build.VERSION.SDK_INT >= 30) {
             val light = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
                 WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-            activity.window.insetsController?.setSystemBarsAppearance(if (night) 0 else light, light)
+            // Through the decor view, which this creates: before setContentView
+            // the window's own insetsController throws.
+            activity.window.decorView.windowInsetsController?.setSystemBarsAppearance(if (night) 0 else light, light)
         }
     }
 
