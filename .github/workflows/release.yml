@@ -31,8 +31,9 @@ jobs:
             echo "::error::Signing secrets are missing; see scripts/release-key.nu"
             exit 1
           fi
-          # A tag names the version; a run by hand builds 0.0.0.
-          if [ "$GITHUB_REF_TYPE" = tag ]; then version="${GITHUB_REF_NAME#v}"; else version=0.0.0; fi
+          # A tag names the version; a run by hand builds 0.0.1, the lowest
+          # whose version code Android accepts.
+          if [ "$GITHUB_REF_TYPE" = tag ]; then version="${GITHUB_REF_NAME#v}"; else version=0.0.1; fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
           export HEXBOARD_KEYSTORE="$RUNNER_TEMP/release.jks"
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$HEXBOARD_KEYSTORE"
