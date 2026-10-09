@@ -167,17 +167,25 @@ class KeyboardView(
     }
 
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
-        val clear = keyboardInsets(insets, density)
-        if (clear.left != insetLeft || clear.right != insetRight || clear.bottom != insetBottom) {
-            insetLeft = clear.left
-            insetRight = clear.right
-            insetBottom = clear.bottom
-            requestLayout()
-        }
+        if (takeInsets(insets)) requestLayout()
         return insets
     }
 
+    /** Keep clear of [insets]; true if that changed anything. */
+    private fun takeInsets(insets: WindowInsets): Boolean {
+        val clear = keyboardInsets(insets, resources)
+        if (clear.left == insetLeft && clear.right == insetRight && clear.bottom == insetBottom) return false
+        insetLeft = clear.left
+        insetRight = clear.right
+        insetBottom = clear.bottom
+        builtFor = null
+        return true
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        // The window's current insets, in case none were dispatched since
+        // they last changed, e.g. while the keyboard was hidden.
+        rootWindowInsets?.let(::takeInsets)
         val width = MeasureSpec.getSize(widthMeasureSpec)
         val keysWidth = (width - insetLeft - insetRight - 2 * padding).toInt()
         val keysHeight = (keyboardHeightPx(layout, keysWidth, resources.displayMetrics.heightPixels) * sizeScale).toInt()

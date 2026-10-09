@@ -119,16 +119,22 @@ class EmojiPanelView(
     }
 
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
-        val clear = keyboardInsets(insets, density)
-        insetLeft = clear.left
-        insetRight = clear.right
-        insetBottom = clear.bottom
+        takeInsets(insets)
         invalidate()
         return insets
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) =
+    private fun takeInsets(insets: WindowInsets) {
+        val clear = keyboardInsets(insets, resources)
+        insetLeft = clear.left
+        insetRight = clear.right
+        insetBottom = clear.bottom
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        rootWindowInsets?.let(::takeInsets)
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), sizeLike.measuredHeight)
+    }
 
     // Geometry, all derived from the current size.
     private val contentLeft get() = insetLeft.toFloat()
