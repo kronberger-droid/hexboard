@@ -97,8 +97,8 @@ class Layout(val keys: List<Key>) {
         /**
          * One string per row, keys separated by spaces. Odd rows are drawn
          * half a hex to the right. `·` leaves a cell empty, `top/bottom`
-         * makes a split key, and the tokens in [bare] become
-         * label-only edge keys. `␣ ⌫ ⏎ ⇧ 123 abc 😊` are the function keys; any
+         * makes a split key, and the tokens in [bare] and the keys in
+         * [bareCells] become label-only edge keys. `␣ ⌫ ⏎ ⇧ 123 abc 😊` are the function keys; any
          * other token types itself. [alternates] gives swipe outputs per
          * token and [longPress] the text a long press types, looked up by the
          * whole token first and then without its suffix. A `:select` or
@@ -107,6 +107,7 @@ class Layout(val keys: List<Key>) {
         fun parse(
             rows: List<String>,
             bare: Set<String> = emptySet(),
+            bareCells: Set<Axial> = emptySet(),
             alternates: Map<String, Map<Direction, String>> = emptyMap(),
             longPress: Map<String, String> = emptyMap(),
         ): Layout = Layout(
@@ -117,11 +118,12 @@ class Layout(val keys: List<Key>) {
                     val base = token.removeSuffix(modifier.orEmpty())
                     val halves = if (base.length > 1) base.split("/", limit = 2) else listOf(base)
                     val alts = alternates[token] ?: alternates[base].orEmpty()
+                    val pos = Axial.fromRowCol(row, col)
                     Key(
-                        pos = Axial.fromRowCol(row, col),
+                        pos = pos,
                         face = faceFor(halves[0]),
                         lower = halves.getOrNull(1)?.let(::faceFor),
-                        bare = token in bare,
+                        bare = token in bare || pos in bareCells,
                         alternates = alts,
                         sideways = if (modifier != null) MODIFIERS.getValue(modifier) else Sideways.EDIT,
                         longPress = longPress[token] ?: longPress[base],
@@ -146,68 +148,10 @@ class Layout(val keys: List<Key>) {
     }
 }
 
+/** The built-in layers, from the default keymap. */
 object Layouts {
-    /**
-     * Diagonal extras on the split punctuation keys, in every layer. Only
-     * diagonals: the top and bottom faces already own up and down.
-     */
-    private val punctuation = mapOf(
-        ",/." to mapOf(
-            Direction.UP_LEFT to "\"",
-            Direction.UP_RIGHT to "'",
-            Direction.DOWN_LEFT to ";",
-            Direction.DOWN_RIGHT to ":",
-        ),
-        "!/?" to mapOf(
-            Direction.UP_LEFT to "(",
-            Direction.UP_RIGHT to ")",
-            Direction.DOWN_LEFT to "-",
-            Direction.DOWN_RIGHT to "@",
-        ),
-    )
+    private val default = Keymaps.parse(Presets.DEFAULT.text)
 
-    /**
-     * Typewise's honeycomb, read off a screenshot of its German layout with
-     * `y` and `z` swapped back to QWERTY places. The two space keys flank
-     * `f h` in the middle row; shift and delete hang off the screen edges
-     * beside them. Dragging the left space moves the cursor and dragging
-     * enter selects; the right space scrubs and recalls like the letters.
-     * A long press on `a o u s` gives the German umlauts and `ß`.
-     */
-    val english = Layout.parse(
-        listOf(
-            "· w e t y i o",
-            "q a r g u l p",
-            "⇧ ,/.:fixed ␣:move f h ␣ !/?:fixed ⌫",
-            "z s d n m j k",
-            "· x c v b 😊/123 ⏎:select",
-        ),
-        bare = setOf("⇧", "⌫"),
-        alternates = punctuation,
-        longPress = mapOf("a" to "ä", "o" to "ö", "u" to "ü", "s" to "ß"),
-    )
-
-    /**
-     * Typewise's symbols layer, read off a screenshot of the app: digits
-     * running 1 to 0 down the middle, paired symbols on split keys, on the
-     * same honeycomb as the letters so the spaces, delete and enter stay put.
-     * A tap on the bottom function key goes back to letters.
-     */
-    val symbols = Layout.parse(
-        listOf(
-            "· ~/^ 1 2 3 4 >/<:fixed",
-            "$/€:fixed =/+ 5 6 7 [/(:fixed ]/):fixed",
-            "⇧ ,/.:fixed ␣:move 8 9 ␣ !/?:fixed ⌫",
-            "°/§ –/- _ 0 `/* |//:fixed ¡/¿",
-            "· & % @ # 😊/ABC ⏎:select",
-        ),
-        bare = setOf("⇧", "⌫"),
-        alternates = punctuation + mapOf(
-            ">/<" to mapOf(Direction.UP_RIGHT to "»", Direction.DOWN_RIGHT to "«"),
-            "$/€" to mapOf(Direction.DOWN_RIGHT to "£"),
-            "[/(" to mapOf(Direction.DOWN_RIGHT to "{"),
-            "]/)" to mapOf(Direction.DOWN_RIGHT to "}"),
-            "|//" to mapOf(Direction.DOWN_RIGHT to "\\"),
-        ),
-    )
+    val english: Layout = default.letters
+    val symbols: Layout = default.symbols
 }
