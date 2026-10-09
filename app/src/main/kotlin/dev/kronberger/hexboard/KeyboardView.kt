@@ -89,9 +89,6 @@ class KeyboardView(
     /** The key under each finger since it went down, lit until it lifts. */
     private val pressed = mutableMapOf<Int, Key>()
 
-    /** Keys whose long press is armed; they show what it will type. */
-    private val armed = mutableSetOf<Key>()
-
     private var touches = buildTouches(
         SWIPE_THRESHOLD_DP, DRAG_STEP_DP, DRAG_GAIN_MAX, DRAG_EDGE_RATE_MAX, LONG_PRESS_MS, HOLD_UP_MS,
     )
@@ -288,12 +285,6 @@ class KeyboardView(
             } else if (key in lit) {
                 canvas.drawCircle(x, c.y, g.radius * 0.6f, pressedFill)
             }
-            val held = key.longPress?.takeIf { key in armed }
-            if (held != null) {
-                // The long press is due: show what lifting will type, hints aside.
-                drawFace(canvas, Face(held, KeyAction.Text(held)), x, c.y)
-                continue
-            }
             if (key.lower == null) {
                 drawFace(canvas, key.face, x, c.y)
             } else {
@@ -310,29 +301,6 @@ class KeyboardView(
                 drawCentered(canvas, label, c.x + ox * g.radius * 0.62f, c.y + oy * g.radius * 0.62f, hintPaint)
             }
         }
-        // Again above the finger, which covers the key itself.
-        for (key in armed) key.longPress?.let { drawBubble(canvas, g, key, keyboard.label(Face(it, KeyAction.Text(it)))) }
-    }
-
-    /**
-     * A bubble showing [text] above [key], or beside it, towards the middle,
-     * where the top of the keyboard leaves no room above.
-     */
-    private fun drawBubble(canvas: Canvas, g: HexGrid, key: Key, text: String) {
-        val c = g.center(key.pos)
-        val half = g.radius * 0.8f
-        var cx = c.x
-        // Kept inside the keyboard; only where that would cover the key itself, beside it.
-        var cy = maxOf(c.y - g.radius * 1.9f, half)
-        if (c.y - cy < g.radius) {
-            cy = c.y
-            cx = if (c.x < width / 2f) c.x + g.radius * 1.9f else c.x - g.radius * 1.9f
-        }
-        canvas.drawRoundRect(RectF(cx - half, cy - half, cx + half, cy + half), half * 0.4f, half * 0.4f, pressedFill)
-        val size = labelPaint.textSize
-        labelPaint.textSize = g.radius * 0.9f
-        drawCentered(canvas, text, cx, cy, labelPaint)
-        labelPaint.textSize = size
     }
 
     private fun fillFor(action: KeyAction) = when (action) {
@@ -470,7 +438,6 @@ class KeyboardView(
             }
             MotionEvent.ACTION_CANCEL -> {
                 pressed.clear()
-                armed.clear()
                 invalidate()
                 out += touches.cancel()
             }
@@ -483,15 +450,11 @@ class KeyboardView(
     private fun handle(e: TouchEvent) {
         when (e) {
             is TouchEvent.Press -> {
-                armed.remove(e.key)
                 // A long press already buzzed when it armed; one reached by resting after a swipe up did not.
                 if (e.gesture == Gesture.HoldUp) haptic(HapticFeedbackConstants.LONG_PRESS)
                 keyboard.resolve(e.key, e.gesture)?.let(onAction)
             }
-            is TouchEvent.Armed -> {
-                armed += e.key
-                haptic(HapticFeedbackConstants.LONG_PRESS)
-            }
+            is TouchEvent.Armed -> haptic(HapticFeedbackConstants.LONG_PRESS)
             is TouchEvent.Act -> onAction(e.action)
         }
         invalidate()
