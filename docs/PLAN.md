@@ -13,7 +13,7 @@ a phase is finished when its done-when holds on the device, then mark it here.
 | 5 Backspace | done |
 | 6 Symbols and editor awareness | done |
 | 7 Emoji | done |
-| 8 Polish | next |
+| 8 Polish | done |
 
 ## Workflow
 
@@ -29,13 +29,23 @@ Things noticed along the way that belong to no phase yet. Take them up
 when Martin asks, or fold them into Phase 8 where they fit.
 
 - **Drag tuning.** The settings screen exposes swipe distance, long-press
-  delay, slow drag step, fast drag gain and edge top speed
-  (`core/Settings.kt`). The rest stay constants: `DRAG_SLOW_DP_S`,
+  delay, the swipe-up-and-hold delay, slow drag step, fast drag gain and
+  edge top speed (`core/Settings.kt`). `PREVIEW_MS` in `core/Gesture.kt`
+  sets when a held key shows its letter. The rest stay constants: `DRAG_SLOW_DP_S`,
   `DRAG_FAST_DP_S`, `DRAG_SMOOTH_MS`, `DRAG_FLICK_MS`, `DRAG_FLICK_DP_S`,
   `DRAG_EDGE_DP`, `DRAG_EDGE_RATE_START`, `DRAG_EDGE_RAMP_MS`, the
   delete repeat's `REPEAT_*`, and word mode's `WORD_CHAIN_MS` (how soon a
   second flick chains) and `WORD_STEP` (words per cluster step) in
   `core/Touches.kt`.
+- **Logic outside `core`.** The scrub, cursor and recall drags keep their
+  state and editor bookkeeping in `HexboardService`, and the visual keymap
+  editor's touches and the emoji panel's hit testing live in their views;
+  none of it has tests. Moving it into `core` is a larger refactor.
+- **Release signing** runs in a GitHub environment named `release`. Restrict
+  it to `v*` tags and move the signing secrets into it, so only release
+  tags can use them. Bumping a Gradle dependency means regenerating
+  `gradle/verification-metadata.xml` from an empty Gradle cache with
+  `--write-verification-metadata sha256`.
 - **Back gesture.** Edge keys ask to be excluded from the system back
   swipe, but Android grants at most 200 dp per edge and the keyboard is
   likely taller. Check on the phone that dragging left from `⌫` and enter
@@ -151,5 +161,7 @@ when Martin asks, or fold them into Phase 8 where they fit.
   where the editor hides its text, drags that fetch more text past
   2000 characters, hold-to-repeat delete, keymaps as text with presets
   (`core/Keymap.kt`) and diagonal swipes on drag keys, and word-wise
-  moving, selecting and deleting on a second flick.
+  moving, selecting and deleting on a second flick, a capital long press
+  by long press then swipe up or by swipe up and hold, and a held key's
+  letter shown in the text that turns into its long press when due.
 - **Done when:** all of the above hold on the phone, light and dark.
