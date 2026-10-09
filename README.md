@@ -1,6 +1,4 @@
-<p align="center"><img src="docs/logo.svg" width="96" alt="Hexboard logo"></p>
-
-# Hexboard
+<h1 align="center"><img src="docs/wordmark.svg" width="380" alt="Hexboard"></h1>
 
 A hexagonal keyboard for Android in the spirit of Typewise. Swipe a key
 for capitals and extras, drag sideways to delete, select or move the
