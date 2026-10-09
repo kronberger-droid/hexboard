@@ -29,6 +29,49 @@ class KeymapTest {
     }
 
     @Test
+    fun writtenKeymapsReadBackToTheSameKeys() {
+        for (preset in Presets.all) {
+            val k = Keymaps.parse(preset.text)
+            val again = Keymaps.parse(Keymaps.write(k))
+            assertEquals(preset.name, k.letters.keys, again.letters.keys)
+            assertEquals(preset.name, k.symbols.keys, again.symbols.keys)
+        }
+    }
+
+    @Test
+    fun addOnsGoToEveryKeyWithThatTextAndSurviveWriting() {
+        val k = Keymaps.parse(default).withAddOns(",/.:fixed", "…", mapOf(Direction.UP_LEFT to "«"))
+        for (layout in listOf(k.letters, k.symbols)) {
+            val key = layout.keys.single { Keymaps.token(it) == ",/.:fixed" }
+            assertEquals("…", key.longPress)
+            assertEquals(mapOf(Direction.UP_LEFT to "«"), key.alternates)
+        }
+        assertEquals(k.letters.keys, Keymaps.parse(Keymaps.write(k)).letters.keys)
+    }
+
+    @Test
+    fun swappingTradesTwoKeysAndKeepsTheEdgesBare() {
+        val shift = Axial.fromRowCol(2, 0)
+        val q = Axial.fromRowCol(1, 0)
+        val k = Keymaps.parse(default).swapped(symbols = false, shift, q)
+        assertEquals("q", k.letters[shift]?.face?.label)
+        assertTrue(k.letters[shift]!!.bare)
+        assertEquals(KeyAction.Shift, k.letters[q]?.face?.action)
+        assertEquals(false, k.letters[q]!!.bare)
+        // The symbols layer is untouched, and the result still writes and parses.
+        assertEquals(Keymaps.parse(default).symbols.keys, k.symbols.keys)
+        assertEquals(k.letters.keys, Keymaps.parse(Keymaps.write(k)).letters.keys)
+    }
+
+    @Test
+    fun theHashKeyIsWrittenAsAWordSinceHashStartsAComment() {
+        val k = Keymaps.parse(default).withAddOns("#", "№", emptyMap())
+        val text = Keymaps.write(k)
+        assertTrue(text.lines().contains("hash hold=№"))
+        assertEquals("№", Keymaps.parse(text).symbols.keys.single { it.face.label == "#" }.longPress)
+    }
+
+    @Test
     fun everyPresetParsesInTheSameShape() {
         val cells = Layouts.english.cells
         for (preset in Presets.all) {

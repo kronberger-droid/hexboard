@@ -1,7 +1,41 @@
 package dev.kronberger.hexboard.core
 
 /** The two layers a keymap defines. */
-class Keymap(val letters: Layout, val symbols: Layout)
+class Keymap(val letters: Layout, val symbols: Layout) {
+
+    /**
+     * Every key whose text is [token], in both layers, with long press
+     * [hold] and swipe [alternates] instead of its own, as a `[keys]` line
+     * would set them.
+     */
+    fun withAddOns(token: String, hold: String?, alternates: Map<Direction, String>): Keymap {
+        fun edit(layout: Layout) = Layout(
+            layout.keys.map { if (Keymaps.token(it) == token) it.copy(longPress = hold, alternates = alternates) else it },
+        )
+        return Keymap(edit(letters), edit(symbols))
+    }
+
+    /**
+     * The keys at [a] and [b] traded places in the [symbols] layer or the
+     * letters. A cell keeps whether it is bare, since that belongs to the
+     * honeycomb's edges, not to the key.
+     */
+    fun swapped(symbols: Boolean, a: Axial, b: Axial): Keymap {
+        val layout = if (symbols) this.symbols else letters
+        val ka = layout[a] ?: return this
+        val kb = layout[b] ?: return this
+        val swapped = Layout(
+            layout.keys.map {
+                when (it.pos) {
+                    a -> kb.copy(pos = a, bare = ka.bare)
+                    b -> ka.copy(pos = b, bare = kb.bare)
+                    else -> it
+                }
+            },
+        )
+        return if (symbols) Keymap(letters, swapped) else Keymap(swapped, this.symbols)
+    }
+}
 
 /** What is wrong with a keymap text, and on which line, counted from 1. */
 class KeymapError(val line: Int, val reason: String) : Exception("line $line: $reason")
@@ -47,6 +81,45 @@ object Keymaps {
 
     private class Section(val name: String, val firstLine: Int) {
         val lines = mutableListOf<Pair<Int, String>>()
+    }
+
+    /** [key] as a row token: its text, its lower half after a slash, its drag as a suffix. */
+    fun token(key: Key): String = buildString {
+        append(key.face.label)
+        key.lower?.let { append("/").append(it.label) }
+        append(
+            when (key.sideways) {
+                Sideways.EDIT -> ""
+                Sideways.MOVE -> ":move"
+                Sideways.SELECT -> ":select"
+                null -> ":fixed"
+            },
+        )
+    }
+
+    /**
+     * [keymap] as text that [parse] reads back to the same keys, under the
+     * format's help. Comments of the text it came from are not kept.
+     */
+    fun write(keymap: Keymap): String {
+        fun rows(layout: Layout) = ROW_LENGTHS.indices.joinToString("\n") { row ->
+            (0 until ROW_LENGTHS[row]).joinToString(" ") { col ->
+                layout[Axial.fromRowCol(row, col)]?.let(::token) ?: "·"
+            }
+        }
+        // One line per token, which sets that token's keys in both layers.
+        val addOns = linkedMapOf<String, Key>()
+        for (key in keymap.letters.keys + keymap.symbols.keys) {
+            if (key.longPress != null || key.alternates.isNotEmpty()) addOns.putIfAbsent(token(key), key)
+        }
+        val lines = addOns.map { (token, key) ->
+            val parts = mutableListOf(if (token.startsWith("#")) "hash" + token.drop(1) else token)
+            key.longPress?.let { parts += "hold=$it" }
+            for ((name, direction) in DIRECTIONS) key.alternates[direction]?.let { parts += "$name=$it" }
+            parts.joinToString(" ")
+        }
+        return Presets.HELP + "\n[letters]\n" + rows(keymap.letters) + "\n\n[symbols]\n" + rows(keymap.symbols) +
+            "\n\n[keys]\n" + lines.joinToString("") { it + "\n" }
     }
 
     /** Parse [text]; throws [KeymapError] for the first problem found. */
@@ -171,7 +244,8 @@ object Keymaps {
 class Preset(val name: String, val text: String)
 
 object Presets {
-    private const val HELP = """# Hexboard keymap. Lines starting with # are comments.
+    /** The format's description, as comments on top of every keymap text. */
+    const val HELP = """# Hexboard keymap. Lines starting with # are comments.
 #
 # [letters] and [symbols] hold five rows of keys each, separated by
 # spaces; odd rows sit half a key to the right. Keep each row's length
