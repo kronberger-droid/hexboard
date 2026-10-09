@@ -476,6 +476,15 @@ class TouchesTest {
     }
 
     @Test
+    fun recallNeverGoesByWords() {
+        val t = touches(flickMs = 150)
+        t.down(0, a, 500f, 0f, emptyMap(), timeMs = 1000)
+        t.up(0, 570f, 0f, timeMs = 1040)
+        t.down(1, a, 500f, 0f, emptyMap(), timeMs = 1100)
+        assertEquals(listOf(by(Drag.RECALL, 1)), t.move(1, 555f, 0f, timeMs = 1110))
+    }
+
+    @Test
     fun aWordDragGoesSlowerThanAClusterDrag() {
         val t = touches(flickMs = 150)
         t.down(0, a, 500f, 0f, emptyMap(), timeMs = 1000)

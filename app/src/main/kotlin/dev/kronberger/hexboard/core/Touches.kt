@@ -259,7 +259,8 @@ class Touches(
 
     /** Whether a drag of [drag] whose first step is [step], starting at [startMs], chains on the last flick. */
     private fun chained(drag: Drag, step: Int, startMs: Long): Boolean {
-        val f = lastFlick ?: return false
+        // Recall brings back what was deleted cluster by cluster; words would only slow it.
+        val f = lastFlick?.takeIf { drag != Drag.RECALL } ?: return false
         return f.drag == drag && f.step == step && startMs - f.endMs in 0..WORD_CHAIN_MS
     }
 
