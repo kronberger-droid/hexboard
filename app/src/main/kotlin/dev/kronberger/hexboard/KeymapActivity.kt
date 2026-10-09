@@ -30,6 +30,7 @@ class KeymapActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs.of(this)
+        val look = SettingsLook(this)
         val dp = resources.displayMetrics.density
         val pad = (12 * dp).toInt()
 
@@ -67,12 +68,14 @@ class KeymapActivity : Activity() {
 
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
+            setPadding(pad, 0, pad, pad)
+            addView(look.header("Keymap") { finish() })
             addView(HorizontalScrollView(context).apply { addView(presets) })
             addView(editor, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
             addView(problem)
             addView(save)
         }
+        look.applyToWindow(column)
         keepClearOfBars(column)
         setContentView(column)
     }

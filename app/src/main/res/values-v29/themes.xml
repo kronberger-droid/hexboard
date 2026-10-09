@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Follows the system's dark mode, which Material.Light cannot before API 29. -->
-    <style name="SettingsTheme" parent="android:Theme.DeviceDefault.DayNight" />
+    <!-- Follows the system's dark mode, which Material.Light cannot before
+         API 29. Pages draw their own titles; see SettingsLook. -->
+    <style name="SettingsTheme" parent="android:Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
 </resources>
