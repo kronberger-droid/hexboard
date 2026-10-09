@@ -32,7 +32,9 @@ when Martin asks, or fold them into Phase 8 where they fit.
   delay, slow drag step, fast drag gain and edge top speed
   (`core/Settings.kt`). The rest stay constants: `DRAG_SLOW_DP_S`,
   `DRAG_FAST_DP_S`, `DRAG_SMOOTH_MS`, `DRAG_FLICK_MS`, `DRAG_FLICK_DP_S`,
-  `DRAG_EDGE_DP`, `DRAG_EDGE_RATE_START`, `DRAG_EDGE_RAMP_MS` in
+  `DRAG_EDGE_DP`, `DRAG_EDGE_RATE_START`, `DRAG_EDGE_RAMP_MS`, the
+  delete repeat's `REPEAT_*`, and word mode's `WORD_CHAIN_MS` (how soon a
+  second flick chains) and `WORD_STEP` (words per cluster step) in
   `core/Touches.kt`.
 - **Back gesture.** Edge keys ask to be excluded from the system back
   swipe, but Android grants at most 200 dp per edge and the keyboard is
@@ -146,6 +148,8 @@ when Martin asks, or fold them into Phase 8 where they fit.
 - Built along the way: long press and up-right swipe for `ä ö ü ß`,
   auto-capitalization from the editor's caps mode, double space for `. `,
   emoji skin tones on long press, batched drag updates, key-event drags
-  where the editor hides its text, and drags that fetch more text past
-  2000 characters.
+  where the editor hides its text, drags that fetch more text past
+  2000 characters, hold-to-repeat delete, keymaps as text with presets
+  (`core/Keymap.kt`) and diagonal swipes on drag keys, and word-wise
+  moving, selecting and deleting on a second flick.
 - **Done when:** all of the above hold on the phone, light and dark.

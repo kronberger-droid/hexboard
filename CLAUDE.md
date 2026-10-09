@@ -22,8 +22,9 @@ its done-when, and which phases are finished.
   `android.icu.text.BreakIterator` and hands `core` a list of boundary
   indices; scrub math works on those indices, and its tests use hand-written
   boundary lists.
-- Layouts are data (a Kotlin object or JSON asset). Drawing code reads the
-  layout; it never names a key.
+- Layouts are data: keymap text parsed by `core/Keymap.kt`, the built-in
+  ones being its presets. Drawing code reads the layout; it never names a
+  key.
 
 ## Commands
 
