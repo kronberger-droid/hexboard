@@ -46,6 +46,7 @@ class TouchesTest {
 
     private fun press(key: Key, g: Gesture = tap) = TouchEvent.Press(key, g)
     private fun by(drag: Drag, delta: Int) = TouchEvent.Act(KeyAction.DragBy(drag, delta))
+    private fun words(drag: Drag, delta: Int) = TouchEvent.Act(KeyAction.DragBy(drag, delta, words = true))
     private fun end(drag: Drag, keep: Boolean = true) = TouchEvent.Act(KeyAction.DragEnd(drag, keep))
 
     @Test
@@ -431,6 +432,67 @@ class TouchesTest {
         val steps = listOf(by(Drag.SCRUB, 1), by(Drag.SCRUB, 2), end(Drag.SCRUB), by(Drag.MOVE, 1), by(Drag.MOVE, -1))
         assertEquals(listOf(by(Drag.SCRUB, 3), end(Drag.SCRUB)), coalesce(steps))
         assertEquals(listOf(press(a), by(Drag.MOVE, 1)), coalesce(listOf(press(a), by(Drag.MOVE, 1))))
+    }
+
+    @Test
+    fun aSecondFlickSoonAfterGoesByWords() {
+        val t = touches(flickMs = 150)
+        t.down(0, a, 500f, 0f, emptyMap(), timeMs = 1000)
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(0, 445f, 0f, timeMs = 1010))
+        assertEquals(listOf(end(Drag.SCRUB)), t.up(0, 445f, 0f, timeMs = 1050))
+        t.down(1, b, 500f, 0f, emptyMap(), timeMs = 1200)
+        assertEquals(listOf(words(Drag.SCRUB, 1)), t.move(1, 445f, 0f, timeMs = 1210))
+        assertEquals(listOf(end(Drag.SCRUB)), t.up(1, 445f, 0f, timeMs = 1250))
+        // A third keeps the chain going; one much later starts afresh.
+        t.down(2, a, 500f, 0f, emptyMap(), timeMs = 1400)
+        assertEquals(listOf(words(Drag.SCRUB, 1)), t.move(2, 445f, 0f, timeMs = 1410))
+        t.up(2, 445f, 0f, timeMs = 1450)
+        t.down(3, a, 500f, 0f, emptyMap(), timeMs = 3000)
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(3, 445f, 0f, timeMs = 3010))
+    }
+
+    @Test
+    fun flicksTooQuickForAMoveChainToo() {
+        val t = touches(flickMs = 150)
+        t.down(0, moveSpace, 500f, 0f, emptyMap(), timeMs = 1000)
+        assertEquals(listOf(by(Drag.MOVE, -1), end(Drag.MOVE)), t.up(0, 430f, 0f, timeMs = 1040))
+        t.down(1, moveSpace, 500f, 0f, emptyMap(), timeMs = 1100)
+        assertEquals(listOf(words(Drag.MOVE, -1), end(Drag.MOVE)), t.up(1, 430f, 0f, timeMs = 1140))
+    }
+
+    @Test
+    fun theChainNeedsTheSameDragAndWayWithNothingBetween() {
+        val t = touches(flickMs = 150)
+        t.down(0, moveSpace, 500f, 0f, emptyMap(), timeMs = 1000)
+        t.up(0, 430f, 0f, timeMs = 1040)
+        // The other way is no chain.
+        t.down(1, moveSpace, 500f, 0f, emptyMap(), timeMs = 1100)
+        assertEquals(listOf(by(Drag.MOVE, 1), end(Drag.MOVE)), t.up(1, 570f, 0f, timeMs = 1140))
+        // A tap between breaks it.
+        t.down(2, a, 0f, 0f, emptyMap(), timeMs = 1200)
+        t.up(2, 0f, 0f, timeMs = 1220)
+        t.down(3, moveSpace, 500f, 0f, emptyMap(), timeMs = 1250)
+        assertEquals(listOf(by(Drag.MOVE, 1), end(Drag.MOVE)), t.up(3, 570f, 0f, timeMs = 1290))
+    }
+
+    @Test
+    fun aWordDragGoesSlowerThanAClusterDrag() {
+        val t = touches(flickMs = 150)
+        t.down(0, a, 500f, 0f, emptyMap(), timeMs = 1000)
+        t.move(0, 445f, 0f, timeMs = 1010)
+        t.up(0, 445f, 0f, timeMs = 1050)
+        t.down(1, a, 500f, 0f, emptyMap(), timeMs = 1200)
+        t.move(1, 445f, 0f, timeMs = 1210)
+        // 40px at 100px/s: four clusters, so 1.2 words.
+        assertEquals(listOf(words(Drag.SCRUB, 1)), t.move(1, 405f, 0f, timeMs = 1610))
+    }
+
+    @Test
+    fun coalesceKeepsWordAndClusterStepsApart() {
+        assertEquals(
+            listOf(by(Drag.MOVE, 2), words(Drag.MOVE, 1)),
+            coalesce(listOf(by(Drag.MOVE, 1), by(Drag.MOVE, 1), words(Drag.MOVE, 1))),
+        )
     }
 
     @Test

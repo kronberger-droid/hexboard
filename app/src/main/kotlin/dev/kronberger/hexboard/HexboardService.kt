@@ -31,6 +31,7 @@ import dev.kronberger.hexboard.core.clusterStart
 import dev.kronberger.hexboard.core.parseEmojiAsset
 import dev.kronberger.hexboard.core.periodForDoubleSpace
 import dev.kronberger.hexboard.core.stepClusters
+import dev.kronberger.hexboard.core.stepWords
 
 class HexboardService : InputMethodService() {
 
@@ -46,6 +47,9 @@ class HexboardService : InputMethodService() {
     private class Scrub(val cursor: Int, val from: Int, var before: String, var boundaries: List<Int>) {
         var steps = 0
         var more = before.length >= WINDOW
+
+        /** Where words start in [before], found when a word step first needs them. */
+        var wordStarts: List<Int>? = null
     }
 
     /** A recall drag in progress: where it inserts, the run, how much is shown. */
@@ -63,6 +67,9 @@ class HexboardService : InputMethodService() {
         var moreBefore = false
         var moreAfter = false
         val end get() = start + text.length
+
+        /** Word starts and ends in [text], found when a word step first needs them. */
+        var words: Pair<List<Int>, List<Int>>? = null
 
         fun step(from: Int, n: Int) = start + stepClusters(boundaries, from - start, n)
     }
@@ -246,10 +253,11 @@ class HexboardService : InputMethodService() {
             }
             KeyAction.Delete -> deleteBack(ic)
             is KeyAction.DragBy -> when {
-                blind == action.drag -> blindBy(ic, action.drag, action.delta)
-                action.drag == Drag.SCRUB -> scrubBy(ic, action.delta)
+                blind == action.drag -> blindBy(ic, action.drag, action.delta, action.words)
+                action.drag == Drag.SCRUB -> scrubBy(ic, action.delta, action.words)
+                // Recall brings text back cluster by cluster, words or not.
                 action.drag == Drag.RECALL -> recallBy(ic, action.delta)
-                else -> travelBy(ic, action.drag, action.delta)
+                else -> travelBy(ic, action.drag, action.delta, action.words)
             }
             is KeyAction.DragEnd -> if (blind == action.drag) blind = null else when (action.drag) {
                 Drag.SCRUB -> scrubEnd(ic, action.keep)
@@ -324,12 +332,21 @@ class HexboardService : InputMethodService() {
         recall.record(before.substring(start), from, from - length)
     }
 
-    private fun scrubBy(ic: InputConnection, delta: Int) {
-        val s = scrub ?: startScrub(ic) ?: return goBlind(ic, Drag.SCRUB, delta)
-        if (s.more && s.steps + delta > s.boundaries.size - 1) reachFurther(ic, s)
-        // Clamped here, so turning back reacts at once however long the
-        // finger was held past the start of the text.
-        s.steps = (s.steps + delta).coerceIn(0, s.boundaries.size - 1)
+    private fun scrubBy(ic: InputConnection, delta: Int, words: Boolean) {
+        val s = scrub ?: startScrub(ic) ?: return goBlind(ic, Drag.SCRUB, delta, words)
+        if (words) {
+            var target = wordTarget(s, delta)
+            if (target == 0 && delta > 0 && s.more) {
+                reachFurther(ic, s)
+                target = wordTarget(s, delta)
+            }
+            s.steps = s.boundaries.size - 1 - s.boundaries.indexOfFirst { it >= target }
+        } else {
+            if (s.more && s.steps + delta > s.boundaries.size - 1) reachFurther(ic, s)
+            // Clamped here, so turning back reacts at once however long the
+            // finger was held past the start of the text.
+            s.steps = (s.steps + delta).coerceIn(0, s.boundaries.size - 1)
+        }
         val start = selectionStart(s)
         ic.setSelection(start, s.cursor)
         cursor.movedBySelf(start, s.cursor)
@@ -388,6 +405,16 @@ class HexboardService : InputMethodService() {
         if (more.isEmpty()) return
         s.before = more + s.before
         s.boundaries = boundaries(s.before)
+        s.wordStarts = null
+    }
+
+    /**
+     * Where in [s]'s text its selection would start [delta] words further
+     * back (forward if negative), always on a word start.
+     */
+    private fun wordTarget(s: Scrub, delta: Int): Int {
+        val starts = s.wordStarts ?: wordStops(s.before).first.also { s.wordStarts = it }
+        return stepClusters(starts, clusterStart(s.boundaries, s.steps), -delta)
     }
 
     /** Absolute editor offset where the scrub's selection starts. */
@@ -425,24 +452,25 @@ class HexboardService : InputMethodService() {
     }
 
     /** Carry on [drag] with key events, the way a backspace tap does when no text is visible. */
-    private fun goBlind(ic: InputConnection, drag: Drag, delta: Int) {
+    private fun goBlind(ic: InputConnection, drag: Drag, delta: Int, words: Boolean) {
         blind = drag
-        blindBy(ic, drag, delta)
+        blindBy(ic, drag, delta, words)
     }
 
     /**
      * One key event per step: deletes for a scrub, arrows for the cursor,
-     * shifted arrows for a selection. A scrub cannot take back what it
-     * deleted, and there is nothing to recall.
+     * shifted arrows for a selection, all with ctrl for [words]. A scrub
+     * cannot take back what it deleted, and there is nothing to recall.
      */
-    private fun blindBy(ic: InputConnection, drag: Drag, delta: Int) {
+    private fun blindBy(ic: InputConnection, drag: Drag, delta: Int, words: Boolean) {
         val code = when {
             drag == Drag.SCRUB -> if (delta > 0) KeyEvent.KEYCODE_DEL else return
             drag == Drag.RECALL -> return
             delta < 0 -> KeyEvent.KEYCODE_DPAD_LEFT
             else -> KeyEvent.KEYCODE_DPAD_RIGHT
         }
-        val meta = if (drag == Drag.SELECT) KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON else 0
+        val shift = if (drag == Drag.SELECT) KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON else 0
+        val meta = shift or if (words) KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON else 0
         repeat(kotlin.math.abs(delta)) {
             val now = SystemClock.uptimeMillis()
             ic.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0, meta))
@@ -450,19 +478,25 @@ class HexboardService : InputMethodService() {
         }
     }
 
-    /** Move the cursor, or the selection's moving end, by [delta] clusters. */
-    private fun travelBy(ic: InputConnection, drag: Drag, delta: Int) {
-        val t = travel ?: startTravel(ic, drag) ?: return goBlind(ic, drag, delta)
-        var focus = t.step(t.focus, delta)
+    /** Move the cursor, or the selection's moving end, by [delta] clusters or [words]. */
+    private fun travelBy(ic: InputConnection, drag: Drag, delta: Int, words: Boolean) {
+        val t = travel ?: startTravel(ic, drag) ?: return goBlind(ic, drag, delta, words)
+        var focus = travelTarget(t, delta, words)
         if ((focus == t.start && delta < 0 && t.moreBefore) || (focus == t.end && delta > 0 && t.moreAfter)) {
             reachFurther(ic, t, drag, delta < 0)
-            focus = t.step(t.focus, delta)
+            focus = travelTarget(t, delta, words)
         }
         t.focus = focus
         if (drag == Drag.MOVE) t.anchor = t.focus
         val (start, end) = minOf(t.anchor, t.focus) to maxOf(t.anchor, t.focus)
         ic.setSelection(start, end)
         cursor.movedBySelf(start, end)
+    }
+
+    private fun travelTarget(t: Travel, delta: Int, words: Boolean): Int {
+        if (!words) return t.step(t.focus, delta)
+        val (starts, ends) = t.words ?: wordStops(t.text).also { t.words = it }
+        return t.start + stepWords(starts, ends, t.focus - t.start, delta)
     }
 
     /**
@@ -486,6 +520,7 @@ class HexboardService : InputMethodService() {
             t.text += more
         }
         t.boundaries = boundaries(t.text)
+        t.words = null
     }
 
     private fun startTravel(ic: InputConnection, drag: Drag): Travel? {
@@ -538,6 +573,29 @@ class HexboardService : InputMethodService() {
                 .build()
             currentInputConnection?.performHandwritingGesture(gesture, null, null)
         }
+    }
+
+    /**
+     * Where the words in [text] start and end, each list with the text's two
+     * ends added, as [stepWords] takes them. Spaces and punctuation between
+     * words are not words, so a word step skips them.
+     */
+    private fun wordStops(text: String): Pair<List<Int>, List<Int>> {
+        val words = BreakIterator.getWordInstance()
+        words.setText(text)
+        val starts = sortedSetOf(0, text.length)
+        val ends = sortedSetOf(0, text.length)
+        var from = words.first()
+        var to = words.next()
+        while (to != BreakIterator.DONE) {
+            if (words.ruleStatus >= BreakIterator.WORD_NONE_LIMIT) {
+                starts += from
+                ends += to
+            }
+            from = to
+            to = words.next()
+        }
+        return starts.toList() to ends.toList()
     }
 
     /** Grapheme cluster boundaries of [text], from 0 to its length. */

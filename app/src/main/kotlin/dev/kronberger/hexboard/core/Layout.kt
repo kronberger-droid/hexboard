@@ -12,8 +12,11 @@ sealed interface KeyAction {
 
     // Sideways drags; no layout token produces these.
 
-    /** Move [drag] on by [delta] grapheme clusters; see [Drag] for the sign. */
-    data class DragBy(val drag: Drag, val delta: Int) : KeyAction
+    /**
+     * Move [drag] on by [delta] grapheme clusters, or by [delta] words if
+     * [words]; see [Drag] for the sign.
+     */
+    data class DragBy(val drag: Drag, val delta: Int, val words: Boolean = false) : KeyAction
 
     /** The finger lifted ([keep]) or the gesture was taken away (not [keep]). */
     data class DragEnd(val drag: Drag, val keep: Boolean = true) : KeyAction

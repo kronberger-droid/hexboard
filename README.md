@@ -13,6 +13,9 @@ libraries.
   bring the deletion back. Drags accelerate like a trackpad pointer: slow
   for single characters, fast to cover distance.
 - Drag the left space to move the cursor, or enter to select.
+- Flick twice to go by words: a second flick within a moment moves,
+  selects or deletes a whole word, and flicking then dragging goes word
+  by word.
 - Symbols layer, an emoji panel with recents, and enter that follows the
   text field's action.
 - Keymaps as text, with presets: rearrange both layers and give any key

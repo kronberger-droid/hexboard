@@ -29,6 +29,14 @@ fun stepClusters(boundaries: List<Int>, from: Int, n: Int): Int {
 }
 
 /**
+ * The offset [n] words right of [from] (left if negative): moving left
+ * lands on word [starts], moving right on word [ends], both ascending and
+ * including the text's two ends. The Android side finds them with ICU.
+ */
+fun stepWords(starts: List<Int>, ends: List<Int>, from: Int, n: Int): Int =
+    if (n < 0) stepClusters(starts, from, n) else stepClusters(ends, from, n)
+
+/**
  * Our view of the editor's selection. The editor reports selection changes
  * asynchronously, so after two quick edits the report for the first can
  * arrive after the second. Positions our own edits produced are therefore

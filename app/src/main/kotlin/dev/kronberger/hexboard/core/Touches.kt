@@ -35,7 +35,7 @@ fun coalesce(events: List<TouchEvent>): List<TouchEvent> {
                 flush()
                 out += e
             }
-            p != null && p.drag == step.drag -> pending = p.copy(delta = p.delta + step.delta)
+            p != null && p.drag == step.drag && p.words == step.words -> pending = p.copy(delta = p.delta + step.delta)
             else -> {
                 flush()
                 pending = step
@@ -123,6 +123,12 @@ class Ramp(private val startPerS: Float, private val maxPerS: Float, private val
     }
 }
 
+/** A drag starting this soon after a flick of the same kind and way goes by words. */
+const val WORD_CHAIN_MS = 400L
+
+/** Words a word drag moves per cluster an ordinary drag would. */
+const val WORD_STEP = 0.3f
+
 /** Deletes per second as a held delete key starts repeating. */
 const val REPEAT_RATE_START = 10f
 
@@ -163,6 +169,10 @@ const val REPEAT_RAMP_MS = 2000f
  * [tick]; lifting it later does nothing more. One resting as long on a key
  * that [Key.repeats] starts tapping it from [tick], at the [repeat] rate,
  * until it lifts or another finger lands.
+ *
+ * A drag that starts within [WORD_CHAIN_MS] of a flick of the same kind
+ * and direction goes by words, at [WORD_STEP] of the usual rate: a second
+ * flick moves a word, and flicking then dragging moves word by word.
  */
 class Touches(
     private val thresholdPx: Float,
@@ -229,6 +239,10 @@ class Touches(
         /** Clusters moved but not yet reported, within half a cluster of zero. */
         var carry = 0f
 
+        /** The drag's first step, and whether it goes by words. */
+        var step = 0
+        var words = false
+
         /** Whether the key repeats by now, when it last did, and taps owed. */
         var repeating = false
         var repeatedMs = 0L
@@ -237,6 +251,17 @@ class Touches(
 
     /** Fingers still down, oldest first. */
     private val active = mutableListOf<Touch>()
+
+    /** The last drag that ended as a flick: its kind, its first step, and when it ended. */
+    private class Flick(val drag: Drag, val step: Int, val endMs: Long)
+
+    private var lastFlick: Flick? = null
+
+    /** Whether a drag of [drag] whose first step is [step], starting at [startMs], chains on the last flick. */
+    private fun chained(drag: Drag, step: Int, startMs: Long): Boolean {
+        val f = lastFlick ?: return false
+        return f.drag == drag && f.step == step && startMs - f.endMs in 0..WORD_CHAIN_MS
+    }
 
     /** No finger is down. */
     val idle get() = active.isEmpty()
@@ -300,7 +325,7 @@ class Touches(
         val (keep, finish) = active.partition { it.drag != null }
         val events = finish.flatMap { t ->
             val p = positions[t.id] ?: Point(t.x, t.y)
-            finished(t, p.x, p.y)
+            finished(t, p.x, p.y, timeMs)
         }
         active.retainAll(keep)
         // Typing during a drag would land inside its selection or recall
@@ -333,7 +358,9 @@ class Touches(
         t.pushedMs = timeMs
         t.edgeSide = side(t)
         t.edgeSinceMs = timeMs
-        return listOf(TouchEvent.Act(KeyAction.DragBy(drag, firstStep(drag, way))))
+        t.step = firstStep(drag, way)
+        t.words = chained(drag, t.step, timeMs)
+        return listOf(TouchEvent.Act(KeyAction.DragBy(drag, t.step, t.words)))
     }
 
     /** Move [t]'s drag along with its finger, now at [x] at [timeMs]. */
@@ -355,7 +382,7 @@ class Touches(
             t.edgeSinceMs = timeMs
             t.pushedMs = timeMs
         }
-        t.carry += forward(drag, dx) * gain.at(t.speed)
+        t.carry += forward(drag, dx) * gain.at(t.speed) * scale(t)
         return report(t, drag)
     }
 
@@ -393,10 +420,13 @@ class Touches(
         if (t.edgeSide != 0) {
             val seconds = (nowMs - t.pushedMs) / 1000f
             t.pushedMs = nowMs
-            t.carry += forward(drag, t.edgeSide * edge.speed(nowMs - t.edgeSinceMs) * seconds)
+            t.carry += forward(drag, t.edgeSide * edge.speed(nowMs - t.edgeSinceMs) * seconds) * scale(t)
         }
         return report(t, drag)
     }
+
+    /** How much a step counts for [t]: words are slower going. */
+    private fun scale(t: Touch) = if (t.words) WORD_STEP else 1f
 
     /** [dx] screen pixels rightwards in [drag]'s sign: a scrub grows leftwards. */
     private fun forward(drag: Drag, dx: Float) = if (drag == Drag.SCRUB) -dx else dx
@@ -429,21 +459,21 @@ class Touches(
             }
             if (whole == 0) return null
             t.shown += whole
-            return TouchEvent.Act(KeyAction.DragBy(drag, whole))
+            return TouchEvent.Act(KeyAction.DragBy(drag, whole, t.words))
         }
         val delta = t.held + whole
         t.held = 0
         if (delta == 0) return null
-        return TouchEvent.Act(KeyAction.DragBy(drag, delta))
+        return TouchEvent.Act(KeyAction.DragBy(drag, delta, t.words))
     }
 
     private fun mayFlick(t: Touch) = t.seenMs - t.startMs < flickMs
 
-    /** Finger [id] lifted at ([x], [y]); empty if it was already finished. */
-    fun up(id: Int, x: Float, y: Float): List<TouchEvent> {
+    /** Finger [id] lifted at ([x], [y]) at [timeMs]; empty if it was already finished. */
+    fun up(id: Int, x: Float, y: Float, timeMs: Long = 0): List<TouchEvent> {
         val i = active.indexOfFirst { it.id == id }
         if (i < 0) return emptyList()
-        return finished(active.removeAt(i), x, y)
+        return finished(active.removeAt(i), x, y, timeMs)
     }
 
     /** The gesture was taken away, e.g. by the system; drop everything. */
@@ -453,17 +483,19 @@ class Touches(
         return events
     }
 
-    private fun finished(t: Touch, x: Float, y: Float): List<TouchEvent> {
+    private fun finished(t: Touch, x: Float, y: Float, timeMs: Long): List<TouchEvent> {
         // A repeating key already did its work.
         if (t.repeating) return emptyList()
         t.drag?.let { drag ->
             // A flick keeps only its first step. Otherwise land where the
             // finger lifted, even if no move event got there.
+            val flick = mayFlick(t)
             val last = when {
-                !mayFlick(t) -> glide(t, x, t.lastMs)
-                t.shown != 0 -> TouchEvent.Act(KeyAction.DragBy(drag, -t.shown))
+                !flick -> glide(t, x, t.lastMs)
+                t.shown != 0 -> TouchEvent.Act(KeyAction.DragBy(drag, -t.shown, t.words))
                 else -> null
             }
+            lastFlick = if (flick) Flick(drag, t.step, max(timeMs, t.seenMs)) else null
             return listOfNotNull(last, TouchEvent.Act(KeyAction.DragEnd(drag)))
         }
         val dx = x - t.x
@@ -476,11 +508,14 @@ class Touches(
             // A flick too quick for any move event: one step, then done.
             Way.LEFT, Way.RIGHT -> {
                 val drag = dragFor(sideways, way)
-                listOf(
-                    TouchEvent.Act(KeyAction.DragBy(drag, firstStep(drag, way))),
+                val step = firstStep(drag, way)
+                val words = chained(drag, step, t.downMs)
+                lastFlick = Flick(drag, step, max(timeMs, t.downMs))
+                return listOf(
+                    TouchEvent.Act(KeyAction.DragBy(drag, step, words)),
                     TouchEvent.Act(KeyAction.DragEnd(drag)),
                 )
             }
-        }
+        }.also { lastFlick = null }
     }
 }

@@ -140,4 +140,19 @@ class DeletionTest {
         assertEquals(2, c.start)
         assertEquals(4, c.end)
     }
+
+    // "foo bar, baz": words start at 0 4 9 and end at 3 7 12.
+    private val starts = listOf(0, 4, 9, 12)
+    private val ends = listOf(0, 3, 7, 12)
+
+    @Test
+    fun wordStepsLandOnStartsLeftwardsAndEndsRightwards() {
+        assertEquals(9, stepWords(starts, ends, 12, -1))
+        assertEquals(9, stepWords(starts, ends, 10, -1))
+        assertEquals(4, stepWords(starts, ends, 12, -2))
+        assertEquals(3, stepWords(starts, ends, 0, 1))
+        assertEquals(7, stepWords(starts, ends, 5, 1))
+        assertEquals(0, stepWords(starts, ends, 2, -5))
+        assertEquals(12, stepWords(starts, ends, 8, 5))
+    }
 }

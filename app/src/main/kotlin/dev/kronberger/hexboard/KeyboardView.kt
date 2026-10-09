@@ -361,7 +361,7 @@ class KeyboardView(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 if (pressed.remove(id) != null) invalidate()
-                out += touches.up(id, event.getX(i), event.getY(i))
+                out += touches.up(id, event.getX(i), event.getY(i), event.eventTime)
                 if (event.actionMasked == MotionEvent.ACTION_UP) performClick()
             }
             MotionEvent.ACTION_CANCEL -> {
