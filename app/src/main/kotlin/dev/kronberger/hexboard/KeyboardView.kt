@@ -339,8 +339,7 @@ class KeyboardView(
     }
 
     private fun drawCentered(canvas: Canvas, text: String, x: Float, y: Float, paint: Paint) {
-        val baseline = y - (paint.ascent() + paint.descent()) / 2f
-        canvas.drawText(text, x, baseline, paint)
+        canvas.drawText(text, x, baselineFor(paint, y), paint)
     }
 
     /** What an editor showing this keyboard hears instead of typing. */

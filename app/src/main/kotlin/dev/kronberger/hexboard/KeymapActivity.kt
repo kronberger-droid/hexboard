@@ -87,7 +87,7 @@ class KeymapActivity : Activity() {
 
     private fun save() {
         val text = editor.text.toString()
-        try {
+        val keymap = try {
             Keymaps.parse(text)
         } catch (e: KeymapError) {
             problem.text = "Line ${e.line}: ${e.reason}"
@@ -96,7 +96,7 @@ class KeymapActivity : Activity() {
         }
         problem.text = ""
         // The default preset is stored as no keymap, so it follows updates.
-        prefs.keymap = text.takeIf { it != Presets.DEFAULT.text }
+        prefs.keymap = text.takeUnless { Keymaps.isDefault(keymap) }
         Toast.makeText(this, "Saved. The keyboard uses it the next time it opens.", Toast.LENGTH_SHORT).show()
     }
 

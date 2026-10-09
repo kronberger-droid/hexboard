@@ -156,8 +156,6 @@ class Layout(val keys: List<Key>) {
 
 /** The built-in layers, from the default keymap. */
 object Layouts {
-    private val default = Keymaps.parse(Presets.DEFAULT.text)
-
-    val english: Layout = default.letters
-    val symbols: Layout = default.symbols
+    val letters: Layout = Keymaps.default.letters
+    val symbols: Layout = Keymaps.default.symbols
 }

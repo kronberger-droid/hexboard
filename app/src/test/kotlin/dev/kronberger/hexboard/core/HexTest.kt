@@ -21,7 +21,7 @@ class HexTest {
 
     @Test
     fun fitFillsTheLimitingAxisAndCentersTheOther() {
-        val cells = Layouts.english.fitCells
+        val cells = Layouts.letters.fitCells
         // Too wide for the layout's aspect: height limits, width is centered.
         val grid = HexGrid.fit(cells, left = 0f, top = 10f, width = 2000f, height = 800f)
         val corners = cells.flatMap { grid.corners(it) }
@@ -33,8 +33,8 @@ class HexTest {
 
     @Test
     fun centersHitThemselves() {
-        val cells = Layouts.english.cells
-        val grid = HexGrid.fit(Layouts.english.fitCells, 0f, 0f, 1080f, 713f)
+        val cells = Layouts.letters.cells
+        val grid = HexGrid.fit(Layouts.letters.fitCells, 0f, 0f, 1080f, 713f)
         for (cell in cells) {
             val c = grid.center(cell)
             assertEquals(cell, grid.nearest(cells, c.x, c.y))
@@ -43,8 +43,8 @@ class HexTest {
 
     @Test
     fun touchesOutsideTheGridSnapToTheEdgeKey() {
-        val cells = Layouts.english.cells
-        val grid = HexGrid.fit(Layouts.english.fitCells, 0f, 0f, 1080f, 713f)
+        val cells = Layouts.letters.cells
+        val grid = HexGrid.fit(Layouts.letters.fitCells, 0f, 0f, 1080f, 713f)
         assertEquals(Axial.fromRowCol(1, 0), grid.nearest(cells, -50f, grid.center(Axial.fromRowCol(1, 0)).y))
     }
 }

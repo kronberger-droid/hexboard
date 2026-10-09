@@ -2,7 +2,9 @@ package dev.kronberger.hexboard
 
 import android.content.res.Configuration
 import android.content.res.Resources
+import android.graphics.Paint
 import dev.kronberger.hexboard.core.Settings
+import dev.kronberger.hexboard.core.ThemeChoice
 import dev.kronberger.hexboard.core.blend
 import dev.kronberger.hexboard.core.lightness
 
@@ -73,9 +75,9 @@ data class Palette(
 
 /** The palette the user's theme setting asks for. */
 fun paletteFor(prefs: Prefs, resources: Resources): Palette = when (prefs[Settings.theme]) {
-    1 -> Palette.LIGHT
-    2 -> Palette.DARK
-    3 -> Palette.custom(
+    ThemeChoice.LIGHT -> Palette.LIGHT
+    ThemeChoice.DARK -> Palette.DARK
+    ThemeChoice.CUSTOM -> Palette.custom(
         prefs[Settings.background],
         prefs[Settings.keyColor],
         prefs[Settings.labelColor],
@@ -84,3 +86,6 @@ fun paletteFor(prefs: Prefs, resources: Resources): Palette = when (prefs[Settin
     )
     else -> Palette.of(resources)
 }
+
+/** The baseline that centres [paint]'s text vertically on [centerY]. */
+fun baselineFor(paint: Paint, centerY: Float) = centerY - (paint.ascent() + paint.descent()) / 2f

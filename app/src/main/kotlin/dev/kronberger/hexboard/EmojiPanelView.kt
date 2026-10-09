@@ -257,7 +257,7 @@ class EmojiPanelView(
         return Triple(slot(0f, 1f), slot(1f, 4f), slot(4f, 5f))
     }
 
-    private fun baseline(centerY: Float, paint: Paint) = centerY - (paint.ascent() + paint.descent()) / 2f
+    private fun baseline(centerY: Float, paint: Paint) = baselineFor(paint, centerY)
 
     override fun computeScroll() {
         if (scroller.computeScrollOffset()) {

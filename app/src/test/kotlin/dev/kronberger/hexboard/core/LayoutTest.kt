@@ -62,7 +62,7 @@ class LayoutTest {
 
     @Test
     fun layersShareTheirShapeSoSwitchingKeepsTheHeight() {
-        assertEquals(Layouts.english.fitCells.toSet(), Layouts.symbols.fitCells.toSet())
+        assertEquals(Layouts.letters.fitCells.toSet(), Layouts.symbols.fitCells.toSet())
     }
 
     @Test
@@ -77,14 +77,14 @@ class LayoutTest {
 
     @Test
     fun everyKeyWithAlternatesInTheDefaultsIsFixed() {
-        for (layout in listOf(Layouts.english, Layouts.symbols)) {
+        for (layout in listOf(Layouts.letters, Layouts.symbols)) {
             assertTrue(layout.keys.filter { it.alternates.isNotEmpty() }.all { it.sideways == null })
         }
     }
 
     @Test
     fun leftSpaceMovesRightSpaceEditsAndEnterSelectsOnBothLayers() {
-        for (layout in listOf(Layouts.english, Layouts.symbols)) {
+        for (layout in listOf(Layouts.letters, Layouts.symbols)) {
             val spaces = layout.keys.filter { it.face.action == KeyAction.Space }.sortedBy { it.pos.q }
             assertEquals(listOf(Sideways.MOVE, Sideways.EDIT), spaces.map { it.sideways })
             assertEquals(Sideways.SELECT, layout.keys.single { it.face.action == KeyAction.Enter }.sideways)
@@ -93,7 +93,7 @@ class LayoutTest {
 
     @Test
     fun englishHasUmlautsAndEszettOnLongPress() {
-        val longPresses = Layouts.english.keys.mapNotNull { k -> k.longPress?.let { textOf(k.face) to it } }.toMap()
+        val longPresses = Layouts.letters.keys.mapNotNull { k -> k.longPress?.let { textOf(k.face) to it } }.toMap()
         assertEquals(mapOf("a" to "ä", "o" to "ö", "u" to "ü", "s" to "ß"), longPresses)
     }
 
@@ -106,8 +106,8 @@ class LayoutTest {
 
     @Test
     fun englishHasEveryLetterOnce() {
-        val letters = Layouts.english.keys.mapNotNull { textOf(it.face) }.filter { it.single().isLetter() }
+        val letters = Layouts.letters.keys.mapNotNull { textOf(it.face) }.filter { it.single().isLetter() }
         assertEquals(('a'..'z').map { it.toString() }, letters.sorted())
-        assertFalse(Layouts.english.keys.any { it.bare && it.pos in Layouts.english.fitCells })
+        assertFalse(Layouts.letters.keys.any { it.bare && it.pos in Layouts.letters.fitCells })
     }
 }

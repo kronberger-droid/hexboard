@@ -134,6 +134,16 @@ object Keymaps {
     /** Keys that act rather than type, and so cannot take a long press. */
     private val FUNCTION_KEYS = setOf("⌫", "⏎", "⇧", "123", "abc", "ABC", "😊")
 
+    /** The default preset's keymap. */
+    val default: Keymap by lazy { parse(Presets.DEFAULT.text) }
+
+    /** [text] parsed, or the default keymap when there is none or it does not parse. */
+    fun load(text: String?): Keymap = text?.let { runCatching { parse(it) }.getOrNull() } ?: default
+
+    /** Whether [keymap] has exactly the default's keys, whatever its text looks like. */
+    fun isDefault(keymap: Keymap): Boolean =
+        keymap.letters.keys == default.letters.keys && keymap.symbols.keys == default.symbols.keys
+
     /** Parse [text]; throws [KeymapError] for the first problem found. */
     fun parse(text: String): Keymap {
         val sections = mutableMapOf<String, Section>()

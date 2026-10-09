@@ -36,7 +36,7 @@ class KeymapEditorActivity : Activity(), KeyboardView.Edits {
     private lateinit var prefs: Prefs
     private lateinit var look: SettingsLook
     private lateinit var keymap: Keymap
-    private val keyboard = Keyboard(Layouts.english, Layouts.symbols)
+    private val keyboard = Keyboard(Layouts.letters, Layouts.symbols)
     private lateinit var keys: KeyboardView
     private lateinit var layers: List<View>
 
@@ -104,7 +104,7 @@ class KeymapEditorActivity : Activity(), KeyboardView.Edits {
     // Again on every return, since the text editor may have changed the keymap.
     override fun onResume() {
         super.onResume()
-        keymap = prefs.keymap?.let { runCatching { Keymaps.parse(it) }.getOrNull() } ?: Keymaps.parse(Presets.DEFAULT.text)
+        keymap = Keymaps.load(prefs.keymap)
         keys.configure(prefs)
         keys.applyPalette(paletteFor(prefs, resources))
         showKeymap()
@@ -202,9 +202,7 @@ class KeymapEditorActivity : Activity(), KeyboardView.Edits {
         }
         keymap = next
         // The default keymap is stored as none, so it follows updates.
-        val default = Keymaps.parse(Presets.DEFAULT.text)
-        val isDefault = default.letters.keys == next.letters.keys && default.symbols.keys == next.symbols.keys
-        prefs.keymap = if (isDefault) null else text
+        prefs.keymap = text.takeUnless { Keymaps.isDefault(next) }
         showKeymap()
     }
 }

@@ -81,8 +81,16 @@ class KeymapTest {
     }
 
     @Test
+    fun loadFallsBackToTheDefaultAndIsDefaultLooksAtKeysOnly() {
+        assertTrue(Keymaps.isDefault(Keymaps.load(null)))
+        assertTrue(Keymaps.isDefault(Keymaps.load("[letters]\nbroken")))
+        assertTrue(Keymaps.isDefault(Keymaps.parse(Keymaps.write(Keymaps.default))))
+        assertEquals(false, Keymaps.isDefault(Keymaps.parse(Presets.GERMAN.text)))
+    }
+
+    @Test
     fun everyPresetParsesInTheSameShape() {
-        val cells = Layouts.english.cells
+        val cells = Layouts.letters.cells
         for (preset in Presets.all) {
             val k = Keymaps.parse(preset.text)
             assertEquals(preset.name, cells, k.letters.cells)

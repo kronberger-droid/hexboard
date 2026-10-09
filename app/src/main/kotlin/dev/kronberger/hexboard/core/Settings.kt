@@ -28,12 +28,20 @@ data class ColorSetting(override val key: String, override val title: String, va
 /** One of [options], stored as its index. */
 data class Choice(override val key: String, override val title: String, val options: List<String>, val default: Int) : Setting
 
+/** The theme setting's options, by their index in [Settings.theme]. */
+object ThemeChoice {
+    const val SYSTEM = 0
+    const val LIGHT = 1
+    const val DARK = 2
+    const val CUSTOM = 3
+}
+
 /** Every setting, in the order the settings screen shows them. */
 object Settings {
     val autoCaps = Toggle("auto_caps", "Capitalize sentences", true)
     val doubleSpace = Toggle("double_space", "Double space types a period", true)
     val haptics = Toggle("haptics", "Vibrate on key press", true)
-    val theme = Choice("theme", "Theme", listOf("Follow system", "Light", "Dark", "Custom"), 0)
+    val theme = Choice("theme", "Theme", listOf("Follow system", "Light", "Dark", "Custom"), ThemeChoice.SYSTEM)
 
     /** The custom theme's colors; the rest of its shades are mixed from these. Dark by default. */
     val background = ColorSetting("color_background", "Custom: background", 0xff121212.toInt())

@@ -8,7 +8,6 @@ import android.inputmethodservice.InputMethodService
 import android.os.Build
 import android.os.SystemClock
 import android.text.InputType
-import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsetsController
@@ -93,7 +92,7 @@ class HexboardService : InputMethodService() {
     private var restore: Restore? = null
     private var travel: Travel? = null
 
-    private val keyboard = Keyboard(Layouts.english, Layouts.symbols)
+    private val keyboard = Keyboard(Layouts.letters, Layouts.symbols)
 
     /** The keymap text the keyboard's layers were last built from. */
     private var loadedKeymap: String? = null
@@ -184,12 +183,8 @@ class HexboardService : InputMethodService() {
         if (keymapLoaded && text == loadedKeymap) return
         keymapLoaded = true
         loadedKeymap = text
-        val keymap = text?.let {
-            runCatching { Keymaps.parse(it) }
-                .onFailure { e -> Log.w("Hexboard", "stored keymap rejected, using the default: ${e.message}") }
-                .getOrNull()
-        }
-        keyboard.setLayouts(keymap?.letters ?: Layouts.english, keymap?.symbols ?: Layouts.symbols)
+        val keymap = Keymaps.load(text)
+        keyboard.setLayouts(keymap.letters, keymap.symbols)
     }
 
     /** Shift for a capital when the editor expects one, e.g. at a sentence start. */
@@ -388,7 +383,7 @@ class HexboardService : InputMethodService() {
      */
     private fun startScrub(ic: InputConnection): Scrub? {
         if (!cursor.known) return null
-        val before = ic.getTextBeforeCursor(WINDOW, 0)?.toString().orEmpty()
+        val before = textBefore(ic).orEmpty()
         val selected = if (cursor.start < cursor.end) ic.getSelectedText(0)?.toString().orEmpty() else ""
         val text = before + selected
         if (text.isEmpty()) return null
@@ -424,6 +419,9 @@ class HexboardService : InputMethodService() {
         if (deleted in 0..s.before.length) remember(s.before.takeLast(deleted), s.cursor, start) else recall.clear()
     }
 
+    /** Up to a window of the text before the cursor, or before the selection. */
+    private fun textBefore(ic: InputConnection): String? = ic.getTextBeforeCursor(WINDOW, 0)?.toString()
+
     /** Keep [text] deleted at [from]..[to] for recall, except in a password field. */
     private fun remember(text: String, from: Int, to: Int) {
         if (inPassword()) recall.clear() else recall.record(text, from, to)
@@ -453,7 +451,7 @@ class HexboardService : InputMethodService() {
         val from = s.cursor - s.before.length
         ic.setSelection(from, s.cursor)
         cursor.movedBySelf(from, s.cursor)
-        val more = ic.getTextBeforeCursor(WINDOW, 0)?.toString().orEmpty()
+        val more = textBefore(ic).orEmpty()
         s.more = more.length >= WINDOW
         if (more.isEmpty()) return
         s.before = more + s.before
@@ -568,7 +566,7 @@ class HexboardService : InputMethodService() {
         ic.setSelection(a, b)
         cursor.movedBySelf(a, b)
         if (left) {
-            val more = ic.getTextBeforeCursor(WINDOW, 0)?.toString().orEmpty()
+            val more = textBefore(ic).orEmpty()
             t.moreBefore = more.length >= WINDOW
             t.text = more + t.text
             t.start -= more.length
@@ -583,7 +581,7 @@ class HexboardService : InputMethodService() {
 
     private fun startTravel(ic: InputConnection, drag: Drag): Travel? {
         if (!cursor.known) return null
-        val before = ic.getTextBeforeCursor(WINDOW, 0)?.toString() ?: return null
+        val before = textBefore(ic) ?: return null
         val selected = if (cursor.start < cursor.end) ic.getSelectedText(0)?.toString().orEmpty() else ""
         val after = ic.getTextAfterCursor(WINDOW, 0)?.toString().orEmpty()
         if (before.isEmpty() && selected.isEmpty() && after.isEmpty()) return null
