@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Debug builds install beside a release (see applicationIdSuffix), so
+         they say which one they are in the launcher and the keyboard list. -->
+    <string name="app_name">Hexboard (debug)</string>
+    <string name="ime_name">Hexboard (debug)</string>
+</resources>

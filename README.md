@@ -17,7 +17,7 @@ Android SDK.
 ```sh
 nix develop
 gradle testDebugUnitTest assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/debug/app-debug.apk   # "Hexboard (debug)", beside a release
 ```
 
 Then enable "Hexboard" under the system's keyboard settings, or from the

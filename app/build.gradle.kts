@@ -51,6 +51,11 @@ android {
     }
 
     buildTypes {
+        // The debug key is public, so a debug build must never be able to
+        // install over a release; as its own app it sits beside one instead.
+        getByName("debug") {
+            applicationIdSuffix = ".debug"
+        }
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true

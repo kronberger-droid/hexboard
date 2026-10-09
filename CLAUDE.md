@@ -36,9 +36,10 @@ is no wrapper.
 - `gradle assembleDebug` builds `app/build/outputs/apk/debug/app-debug.apk`.
 - `adb install -r app/build/outputs/apk/debug/app-debug.apk` puts it on the
   phone (connected over wireless debugging; no emulator).
-- `adb shell ime enable dev.kronberger.hexboard/.HexboardService` and
-  `adb shell ime set dev.kronberger.hexboard/.HexboardService` switch to it
-  without the settings UI.
+- `adb shell ime enable dev.kronberger.hexboard.debug/dev.kronberger.hexboard.HexboardService`
+  and `adb shell ime set dev.kronberger.hexboard.debug/dev.kronberger.hexboard.HexboardService`
+  switch to the debug build without the settings UI. It installs beside a
+  release as "Hexboard (debug)", with its own settings.
 
 `nu scripts/emoji.nu` regenerates `app/src/main/assets/emoji.txt` from
 Unicode's `emoji-test.txt`. The asset is committed; rerun it only on an
