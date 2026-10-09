@@ -11,8 +11,8 @@ your own.
 
 ## Features
 
-- **Swipes.** Up for a capital, down for lowercase, and diagonals on the
-  punctuation keys for quotes, brackets and more.
+- **Swipes.** Up for a capital, and diagonals on the punctuation keys for
+  quotes, brackets and more.
 - **Long press.** `a o u s` give `ä ö ü ß`, shown in the text while you
   hold. Swipe up after the long press, or swipe up and hold, for the capital.
 - **Drags.** Drag left on a key to delete, right to bring it back. The left
