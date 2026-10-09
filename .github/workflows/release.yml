@@ -1,0 +1,42 @@
+# Builds a signed APK in the flake's devShell and publishes it as a GitHub
+# release whenever a tag like v1.2.3 is pushed. The signing key comes from
+# repository secrets; scripts/release-key.nu creates it.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+
+      - name: Build and test
+        env:
+          KEYSTORE_BASE64: ${{ secrets.HEXBOARD_KEYSTORE_BASE64 }}
+          HEXBOARD_KEYSTORE_PASSWORD: ${{ secrets.HEXBOARD_KEYSTORE_PASSWORD }}
+          HEXBOARD_KEY_ALIAS: ${{ secrets.HEXBOARD_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$HEXBOARD_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Signing secrets are missing; see scripts/release-key.nu"
+            exit 1
+          fi
+          version="${GITHUB_REF_NAME#v}"
+          export HEXBOARD_KEYSTORE="$RUNNER_TEMP/release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$HEXBOARD_KEYSTORE"
+          nix develop --command gradle --no-daemon testDebugUnitTest assembleRelease -Phexboard.version="$version"
+          cp app/build/outputs/apk/release/app-release.apk "hexboard-$version.apk"
+          nix develop --command sh -c '"$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$0"' "hexboard-$version.apk"
+          rm -f "$HEXBOARD_KEYSTORE"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "hexboard-${GITHUB_REF_NAME#v}.apk" --title "$GITHUB_REF_NAME" --generate-notes
