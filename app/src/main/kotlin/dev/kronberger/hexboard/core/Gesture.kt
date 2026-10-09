@@ -25,6 +25,12 @@ const val SWIPE_THRESHOLD_DP = 18f
 /** How long a finger rests on a key with a [Key.longPress] before it types that. */
 const val LONG_PRESS_MS = 350L
 
+/**
+ * How long a finger rests on a key with a [Key.longPress] before the text
+ * shows, provisionally, what it would type; longer than a tap takes.
+ */
+const val PREVIEW_MS = 120L
+
 /** How long a finger rests after swiping up before that types the long press as a capital. */
 const val HOLD_UP_MS = 200L
 

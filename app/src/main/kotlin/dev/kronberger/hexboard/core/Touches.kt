@@ -16,6 +16,9 @@ sealed interface TouchEvent {
 
     /** A long press on [key] is due; what it types is decided when the finger lifts or swipes up. */
     data class Armed(val key: Key) : TouchEvent
+
+    /** Show what [gesture] on [key] would type, provisionally; a null [gesture] takes it away. */
+    data class Preview(val key: Key, val gesture: Gesture?) : TouchEvent
 }
 
 /**
@@ -167,8 +170,10 @@ const val REPEAT_RAMP_MS = 2000f
  * never finished early by another finger, and fingers landing while it
  * runs are ignored.
  *
- * A finger resting on a key with a [Key.longPress] for [holdMs], without
- * passing the threshold, arms it from [tick] ([TouchEvent.Armed]): swiping
+ * A finger resting on a key with a [Key.longPress] for [previewMs] has
+ * what a tap would type shown provisionally ([TouchEvent.Preview]), taken
+ * away again if it swipes or drags. Resting for [holdMs] arms the long
+ * press from [tick] ([TouchEvent.Armed]), showing it instead: swiping
  * up from there finishes it with [Gesture.HoldUp], lifting with
  * [Gesture.Hold]. One that swiped up on such a key and then rests, moving
  * less than half the threshold, for [holdUpMs] is finished with
@@ -189,6 +194,7 @@ class Touches(
     private val holdMs: Long,
     private val repeat: Ramp,
     private val holdUpMs: Long,
+    private val previewMs: Long,
 ) {
     /** Horizontal extent of the keyboard the finger can reach, in px. */
     private var left = Float.NEGATIVE_INFINITY
@@ -220,6 +226,9 @@ class Touches(
         /** A long press is due, armed with the finger at [armY]. */
         var armed = false
         var armY = 0f
+
+        /** Something is shown provisionally for this finger. */
+        var previewed = false
         var lastMs = 0L
         var startMs = 0L
 
@@ -380,7 +389,23 @@ class Touches(
         val way = way(t.key, x - t.x, y - t.y) ?: return emptyList()
         t.way = way
         if (way == Way.UP) rest(t, x, y, timeMs)
-        if (way != Way.LEFT && way != Way.RIGHT) return emptyList()
+        // A swipe or drag after all: take back what a tap would have typed.
+        val unshow = if (t.previewed) listOf(TouchEvent.Preview(t.key, null)) else emptyList()
+        t.previewed = false
+        if (way != Way.LEFT && way != Way.RIGHT) return unshow
+        return unshow + startDrag(t, sideways, way, x, timeMs, prevX, prevMs, sampled)
+    }
+
+    private fun startDrag(
+        t: Touch,
+        sideways: Sideways,
+        way: Way,
+        x: Float,
+        timeMs: Long,
+        prevX: Float,
+        prevMs: Long,
+        sampled: Boolean,
+    ): List<TouchEvent> {
         val drag = dragFor(sideways, way)
         t.drag = drag
         // A finger that crossed the threshold in one sample is as fast as it gets.
@@ -431,6 +456,8 @@ class Touches(
      * release what a drag held back once it is no flick.
      */
     fun tick(nowMs: Long): List<TouchEvent> {
+        val shown = active.filter { holding(it) && !it.previewed && nowMs - it.downMs >= previewMs }
+        for (t in shown) t.previewed = true
         val held = active.filter { holding(it) && nowMs - it.downMs >= holdMs }
         for (t in held) {
             t.armed = true
@@ -438,7 +465,8 @@ class Touches(
         }
         val heldUp = active.filter { holdingUp(it) && nowMs - it.restMs >= holdUpMs }
         active.removeAll(heldUp)
-        return held.map { TouchEvent.Armed(it.key) } +
+        return shown.map { TouchEvent.Preview(it.key, Gesture.Tap) } +
+            held.flatMap { listOf(TouchEvent.Armed(it.key), TouchEvent.Preview(it.key, Gesture.Hold)) } +
             heldUp.map { TouchEvent.Press(it.key, Gesture.HoldUp) } +
             active.flatMap { t -> repeated(t, nowMs) } +
             active.mapNotNull { t -> push(t, nowMs) }
@@ -523,7 +551,10 @@ class Touches(
 
     /** The gesture was taken away, e.g. by the system; drop everything. */
     fun cancel(): List<TouchEvent> {
-        val events = active.mapNotNull { t -> t.drag?.let { TouchEvent.Act(KeyAction.DragEnd(it, keep = false)) } }
+        val events = active.mapNotNull { t ->
+            t.drag?.let { TouchEvent.Act(KeyAction.DragEnd(it, keep = false)) }
+                ?: TouchEvent.Preview(t.key, null).takeIf { t.previewed }
+        }
         active.clear()
         return events
     }
@@ -557,7 +588,8 @@ class Touches(
                 val step = firstStep(drag, way)
                 val words = chained(drag, step, t.downMs)
                 lastFlick = Flick(drag, step, max(timeMs, t.downMs))
-                return listOf(
+                return listOfNotNull(
+                    TouchEvent.Preview(t.key, null).takeIf { t.previewed },
                     TouchEvent.Act(KeyAction.DragBy(drag, step, words)),
                     TouchEvent.Act(KeyAction.DragEnd(drag)),
                 )

@@ -47,6 +47,17 @@ class KeyboardTest {
     }
 
     @Test
+    fun aPreviewUsesUpNoShift() {
+        val kb = Keyboard(layout)
+        kb.autoCaps(true)
+        assertEquals("A", kb.preview(a, Gesture.Tap))
+        assertEquals("Ä", kb.preview(a, Gesture.Hold))
+        assertEquals(ShiftState.ONCE, kb.shift)
+        assertEquals(text("Ä"), kb.press(a, Gesture.Hold))
+        assertEquals(ShiftState.OFF, kb.shift)
+    }
+
+    @Test
     fun holdingAfterASwipeUpTypesTheLongPressAsACapital() {
         val kb = Keyboard(layout)
         assertEquals(text("Ä"), kb.press(a, Gesture.HoldUp))

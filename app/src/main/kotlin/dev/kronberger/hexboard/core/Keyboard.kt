@@ -71,6 +71,15 @@ class Keyboard(private var letters: Layout, private var symbols: Layout = letter
         else -> action
     }
 
+    /** The text [gesture] on [key] would type now, without using up a one-shot shift. */
+    fun preview(key: Key, gesture: Gesture): String? {
+        val (s, a) = shift to autoShifted
+        val action = action(key, gesture)
+        shift = s
+        autoShifted = a
+        return (action as? KeyAction.Text)?.text
+    }
+
     private fun action(key: Key, gesture: Gesture): KeyAction {
         val face = key.face
         if (gesture == Gesture.Hold) key.longPress?.let { return typed(KeyAction.Text(cased(it, shift != ShiftState.OFF))) }

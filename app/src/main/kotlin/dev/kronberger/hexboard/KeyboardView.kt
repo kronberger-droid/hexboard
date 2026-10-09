@@ -22,6 +22,7 @@ import dev.kronberger.hexboard.core.KeyAction
 import dev.kronberger.hexboard.core.Keyboard
 import dev.kronberger.hexboard.core.HOLD_UP_MS
 import dev.kronberger.hexboard.core.LONG_PRESS_MS
+import dev.kronberger.hexboard.core.PREVIEW_MS
 import dev.kronberger.hexboard.core.Layout
 import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
 import dev.kronberger.hexboard.core.Settings
@@ -109,6 +110,7 @@ class KeyboardView(
         longPressMs,
         Ramp(REPEAT_RATE_START, REPEAT_RATE_MAX, REPEAT_RAMP_MS),
         holdUpMs,
+        PREVIEW_MS,
     )
 
     /** Take up the user's settings; called whenever the keyboard opens. */
@@ -455,6 +457,7 @@ class KeyboardView(
                 keyboard.resolve(e.key, e.gesture)?.let(onAction)
             }
             is TouchEvent.Armed -> haptic(HapticFeedbackConstants.LONG_PRESS)
+            is TouchEvent.Preview -> onAction(KeyAction.Preview(e.gesture?.let { keyboard.preview(e.key, it) }))
             is TouchEvent.Act -> onAction(e.action)
         }
         invalidate()

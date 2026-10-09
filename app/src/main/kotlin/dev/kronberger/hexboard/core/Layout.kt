@@ -10,6 +10,9 @@ sealed interface KeyAction {
     data object Letters : KeyAction
     data object Emoji : KeyAction
 
+    /** Show [text] provisionally where the next character goes, replacing what was shown; null takes it away. */
+    data class Preview(val text: String?) : KeyAction
+
     // Sideways drags; no layout token produces these.
 
     /**

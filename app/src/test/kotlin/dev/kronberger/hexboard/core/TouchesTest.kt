@@ -37,12 +37,12 @@ class TouchesTest {
     private val edge = DragEdge(zonePx = 100f, startPerS = 10f, maxPerS = 110f, rampMs = 1000f)
     // Flicks, where tested, are drags faster than 300px/s lifted within 150ms.
     // Long presses fire after 300ms.
-    private fun touches(flickMs: Long = 0) = Touches(50f, gain, flickMs, flickPxPerS = 300f, edge = edge, holdMs = 300, repeat = repeat, holdUpMs = 200)
+    private fun touches(flickMs: Long = 0) = Touches(50f, gain, flickMs, flickPxPerS = 300f, edge = edge, holdMs = 300, repeat = repeat, holdUpMs = 200, previewMs = 120)
 
     // A keyboard 1000px wide with edge strips of 100px, and a flat gain of
     // one cluster per 10px so only the edge changes speed.
     private fun edged(flickMs: Long = 0) =
-        Touches(50f, DragGain(10f, 1e6f, 2e6f, 1f, 0f), flickMs, 300f, edge, holdMs = 300, repeat = repeat, holdUpMs = 200).also { it.span(0f, 1000f) }
+        Touches(50f, DragGain(10f, 1e6f, 2e6f, 1f, 0f), flickMs, 300f, edge, holdMs = 300, repeat = repeat, holdUpMs = 200, previewMs = 120).also { it.span(0f, 1000f) }
 
     private fun press(key: Key, g: Gesture = tap) = TouchEvent.Press(key, g)
     private fun by(drag: Drag, delta: Int) = TouchEvent.Act(KeyAction.DragBy(drag, delta))
@@ -333,12 +333,35 @@ class TouchesTest {
         val t = touches()
         t.down(0, o, 0f, 0f, emptyMap(), timeMs = 1000)
         assertTrue(t.ticking)
+        assertEquals(none, t.tick(1119))
+        assertEquals(listOf(TouchEvent.Preview(o, Gesture.Tap)), t.tick(1120))
         assertEquals(none, t.tick(1299))
         t.move(0, 10f, 5f, timeMs = 1200)
-        assertEquals(listOf(TouchEvent.Armed(o)), t.tick(1300))
+        assertEquals(listOf(TouchEvent.Armed(o), TouchEvent.Preview(o, Gesture.Hold)), t.tick(1300))
         assertFalse(t.ticking)
         // Lifting without swiping up types it as it is.
         assertEquals(listOf(press(o, Gesture.Hold)), t.up(0, 10f, 5f))
+    }
+
+    @Test
+    fun aSwipeAfterThePreviewTakesItBack() {
+        val t = touches()
+        t.down(0, o, 500f, 0f, emptyMap(), timeMs = 1000)
+        t.tick(1150)
+        assertEquals(listOf(TouchEvent.Preview(o, null)), t.move(0, 500f, -60f, timeMs = 1200))
+        assertEquals(listOf(press(o, Gesture.Swipe(Direction.UP))), t.up(0, 500f, -60f))
+        // A drag likewise, before its first step.
+        t.down(1, o, 500f, 0f, emptyMap(), timeMs = 2000)
+        t.tick(2150)
+        assertEquals(listOf(TouchEvent.Preview(o, null), by(Drag.SCRUB, 1)), t.move(1, 440f, 0f, timeMs = 2200))
+    }
+
+    @Test
+    fun quickTapsShowNoPreview() {
+        val t = touches()
+        t.down(0, o, 0f, 0f, emptyMap(), timeMs = 1000)
+        assertEquals(none, t.tick(1100))
+        assertEquals(listOf(press(o)), t.up(0, 0f, 0f, timeMs = 1100))
     }
 
     @Test

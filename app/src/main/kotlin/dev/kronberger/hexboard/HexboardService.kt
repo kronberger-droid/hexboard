@@ -74,6 +74,9 @@ class HexboardService : InputMethodService() {
         fun step(from: Int, n: Int) = start + stepClusters(boundaries, from - start, n)
     }
 
+    /** Where provisional text from a held key starts, or -1 while none is shown. */
+    private var previewFrom = -1
+
     /**
      * The last action typed a space that could start a double space; the
      * third space in a row does not, so it never stacks periods.
@@ -210,6 +213,7 @@ class HexboardService : InputMethodService() {
     override fun onStartInput(attribute: EditorInfo, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
         cursor.reset(attribute.initialSelStart, attribute.initialSelEnd)
+        previewFrom = -1
         recall.clear()
         lastWasSpace = false
         scrub = null
@@ -262,6 +266,7 @@ class HexboardService : InputMethodService() {
                     if (action.keep) showSelectionToolbar(ic, cursor.start, cursor.end)
                 }
             }
+            is KeyAction.Preview -> preview(ic, action.text)
             KeyAction.Emoji -> showEmoji(true)
             // Only the emoji panel sends this; the keys switch layers in Keyboard.
             KeyAction.Letters -> showEmoji(false)
@@ -269,7 +274,8 @@ class HexboardService : InputMethodService() {
             KeyAction.Shift, KeyAction.Symbols -> Unit
         }
         // The editor answers in order, so this already sees the edit above.
-        if (action !is KeyAction.DragBy) updateCaps()
+        // Provisional text is no edit: the shift it was shown with must hold.
+        if (action !is KeyAction.DragBy && action !is KeyAction.Preview) updateCaps()
         lastWasSpace = action == KeyAction.Space && !lastWasSpace
     }
 
@@ -296,8 +302,27 @@ class HexboardService : InputMethodService() {
 
     private fun type(ic: InputConnection, text: String) {
         recall.clear()
+        // Committing replaces any provisional text, so count from where it started.
+        val from = if (previewFrom >= 0) previewFrom else cursor.start
+        previewFrom = -1
         ic.commitText(text, 1)
-        if (cursor.known) cursor.movedBySelf(cursor.start + text.length)
+        if (cursor.known) cursor.movedBySelf(from + text.length)
+    }
+
+    /** Show [text] provisionally as composing text, or take it away for null. */
+    private fun preview(ic: InputConnection, text: String?) {
+        if (text == null) {
+            if (previewFrom < 0) return
+            ic.setComposingText("", 1)
+            ic.finishComposingText()
+            cursor.movedBySelf(previewFrom)
+            previewFrom = -1
+            return
+        }
+        if (!cursor.known) return
+        if (previewFrom < 0) previewFrom = cursor.start
+        ic.setComposingText(text, 1)
+        cursor.movedBySelf(previewFrom + text.length)
     }
 
     /** Delete the selection, or else one grapheme cluster before the cursor. */
