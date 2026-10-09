@@ -1,4 +1,4 @@
-<h1 align="center"><img src="docs/wordmark.svg" width="380" alt="Hexboard"></h1>
+<h1 align="center"><img src="docs/wordmark.svg" width="420" alt="Hexboard"></h1>
 
 A hexagonal keyboard for Android. Swipe a key for capitals and extras,
 drag sideways to delete, select or move the cursor, and make the layout
