@@ -47,6 +47,13 @@ class KeyboardTest {
     }
 
     @Test
+    fun holdingAfterASwipeUpTypesTheLongPressAsACapital() {
+        val kb = Keyboard(layout)
+        assertEquals(text("Ä"), kb.press(a, Gesture.HoldUp))
+        assertEquals(text("a"), kb.press(a))
+    }
+
+    @Test
     fun swipeUpRightTypesTheLongPressToo() {
         assertEquals(text("ä"), Keyboard(layout).press(a, swipe(Direction.UP_RIGHT)))
     }

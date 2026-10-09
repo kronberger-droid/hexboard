@@ -440,7 +440,7 @@ class KeyboardView(
     private fun handle(e: TouchEvent) {
         when (e) {
             is TouchEvent.Press -> {
-                if (e.gesture == Gesture.Hold) haptic(HapticFeedbackConstants.LONG_PRESS)
+                if (e.gesture == Gesture.Hold || e.gesture == Gesture.HoldUp) haptic(HapticFeedbackConstants.LONG_PRESS)
                 keyboard.resolve(e.key, e.gesture)?.let(onAction)
             }
             is TouchEvent.Act -> onAction(e.action)

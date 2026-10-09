@@ -74,6 +74,7 @@ class Keyboard(private var letters: Layout, private var symbols: Layout = letter
     private fun action(key: Key, gesture: Gesture): KeyAction {
         val face = key.face
         if (gesture == Gesture.Hold) key.longPress?.let { return typed(KeyAction.Text(cased(it, shift != ShiftState.OFF))) }
+        if (gesture == Gesture.HoldUp) key.longPress?.let { return typed(KeyAction.Text(cased(it, true))) }
         val direction = (gesture as? Gesture.Swipe)?.direction
         direction?.let { key.alternates[it] }?.let { return typed(KeyAction.Text(it)) }
         if (direction == Direction.UP_RIGHT) key.longPress?.let { return typed(KeyAction.Text(cased(it, shift != ShiftState.OFF))) }

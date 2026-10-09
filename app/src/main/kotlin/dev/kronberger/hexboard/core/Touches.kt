@@ -166,6 +166,8 @@ const val REPEAT_RAMP_MS = 2000f
  *
  * A finger resting on a key with a [Key.longPress] for [holdMs], without
  * passing the threshold, is finished there with [Gesture.Hold], also from
+ * [tick]. One that swiped up on such a key and then rests, moving less than
+ * half the threshold, for [holdMs] is finished with [Gesture.HoldUp], also from
  * [tick]; lifting it later does nothing more. One resting as long on a key
  * that [Key.repeats] starts tapping it from [tick], at the [repeat] rate,
  * until it lifts or another finger lands.
@@ -239,6 +241,11 @@ class Touches(
         /** Clusters moved but not yet reported, within half a cluster of zero. */
         var carry = 0f
 
+        /** Where and since when a finger that swiped up has rested. */
+        var restX = 0f
+        var restY = 0f
+        var restMs = 0L
+
         /** The drag's first step, and whether it goes by words. */
         var step = 0
         var words = false
@@ -268,12 +275,14 @@ class Touches(
     val idle get() = active.isEmpty()
 
     /** Whether [tick] has work to do: a drag running, a long press or a key repeat pending. */
-    val ticking get() = active.any { it.drag != null || holding(it) || resting(it) }
+    val ticking get() = active.any { it.drag != null || holding(it) || resting(it) || holdingUp(it) }
 
     /** Still, short of the threshold: nothing decided yet. */
     private fun still(t: Touch) = t.drag == null && t.way == null
 
     private fun holding(t: Touch) = t.key.longPress != null && still(t)
+
+    private fun holdingUp(t: Touch) = t.key.longPress != null && t.way == Way.UP && t.drag == null
 
     private fun resting(t: Touch) = t.key.repeats && still(t)
     /**
@@ -345,9 +354,15 @@ class Touches(
         t.lastMs = timeMs
         t.sampled = true
         val sideways = t.key.sideways ?: return emptyList()
+        if (t.way == Way.UP) {
+            // Still moving: the rest that makes a capital long press starts over.
+            if (hypot(x - t.restX, y - t.restY) > thresholdPx / 2) rest(t, x, y, timeMs)
+            return emptyList()
+        }
         if (t.way != null) return emptyList()
         val way = way(t.key, x - t.x, y - t.y) ?: return emptyList()
         t.way = way
+        if (way == Way.UP) rest(t, x, y, timeMs)
         if (way != Way.LEFT && way != Way.RIGHT) return emptyList()
         val drag = dragFor(sideways, way)
         t.drag = drag
@@ -362,6 +377,12 @@ class Touches(
         t.step = firstStep(drag, way)
         t.words = chained(drag, t.step, timeMs)
         return listOf(TouchEvent.Act(KeyAction.DragBy(drag, t.step, t.words)))
+    }
+
+    private fun rest(t: Touch, x: Float, y: Float, timeMs: Long) {
+        t.restX = x
+        t.restY = y
+        t.restMs = timeMs
     }
 
     /** Move [t]'s drag along with its finger, now at [x] at [timeMs]. */
@@ -394,8 +415,10 @@ class Touches(
      */
     fun tick(nowMs: Long): List<TouchEvent> {
         val held = active.filter { holding(it) && nowMs - it.downMs >= holdMs }
-        active.removeAll(held)
+        val heldUp = active.filter { holdingUp(it) && nowMs - it.restMs >= holdMs }
+        active.removeAll(held + heldUp)
         return held.map { TouchEvent.Press(it.key, Gesture.Hold) } +
+            heldUp.map { TouchEvent.Press(it.key, Gesture.HoldUp) } +
             active.flatMap { t -> repeated(t, nowMs) } +
             active.mapNotNull { t -> push(t, nowMs) }
     }

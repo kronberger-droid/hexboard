@@ -14,6 +14,9 @@ sealed interface Gesture {
 
     /** A finger rested on the key for [LONG_PRESS_MS] without swiping. */
     data object Hold : Gesture
+
+    /** A finger swiped up and then rested for [LONG_PRESS_MS]: the long press as a capital. */
+    data object HoldUp : Gesture
 }
 
 /** Displacement below which a touch counts as a tap. */

@@ -341,6 +341,37 @@ class TouchesTest {
     }
 
     @Test
+    fun swipingUpAndRestingGivesTheCapitalLongPress() {
+        val t = touches()
+        t.down(0, o, 0f, 0f, emptyMap(), timeMs = 1000)
+        assertEquals(none, t.move(0, 0f, -60f, timeMs = 1050))
+        assertTrue(t.ticking)
+        assertEquals(none, t.tick(1349))
+        assertEquals(listOf(press(o, Gesture.HoldUp)), t.tick(1350))
+        assertEquals(none, t.up(0, 0f, -60f))
+    }
+
+    @Test
+    fun aSlowSwipeUpStillMovingIsNoRest() {
+        val t = touches()
+        t.down(0, o, 0f, 0f, emptyMap(), timeMs = 1000)
+        t.move(0, 0f, -60f, timeMs = 1050)
+        // 30px further, more than half the threshold: the rest starts over.
+        t.move(0, 0f, -90f, timeMs = 1300)
+        assertEquals(none, t.tick(1400))
+        assertEquals(listOf(press(o, Gesture.Swipe(Direction.UP))), t.up(0, 0f, -90f))
+    }
+
+    @Test
+    fun restingAfterASwipeUpOnAPlainKeyIsStillACapital() {
+        val t = touches()
+        t.down(0, a, 0f, 0f, emptyMap(), timeMs = 1000)
+        t.move(0, 0f, -60f, timeMs = 1050)
+        assertEquals(none, t.tick(3000))
+        assertEquals(listOf(press(a, Gesture.Swipe(Direction.UP))), t.up(0, 0f, -60f))
+    }
+
+    @Test
     fun liftingBeforeTheLongPressIsATap() {
         val t = touches()
         t.down(0, o, 0f, 0f, emptyMap(), timeMs = 1000)
@@ -352,9 +383,10 @@ class TouchesTest {
     fun swipingOffALongPressKeyCancelsTheLongPress() {
         val t = touches()
         t.down(0, o, 0f, 0f, emptyMap(), timeMs = 1000)
-        t.move(0, 0f, -60f, timeMs = 1100)
+        // Down, since resting after a swipe up is a gesture of its own.
+        t.move(0, 0f, 60f, timeMs = 1100)
         assertEquals(none, t.tick(2000))
-        assertEquals(listOf(press(o, Gesture.Swipe(Direction.UP))), t.up(0, 0f, -60f))
+        assertEquals(listOf(press(o, Gesture.Swipe(Direction.DOWN))), t.up(0, 0f, 60f))
     }
 
     @Test
