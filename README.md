@@ -13,20 +13,18 @@ your own.
 
 - **Swipes.** Up for a capital, and diagonals on the punctuation keys for
   quotes, brackets and more.
-- **Long press.** `a o u s` give `ä ö ü ß`, shown in the text while you
-  hold. Swipe up after the long press, or swipe up and hold, for the capital.
+- **Long press.** Hold a key for its alternate character, shown in the text
+  while you hold. Swipe up after the long press, or swipe up and hold, for
+  its capital.
 - **Drags.** Drag left on a key to delete, right to bring it back. The left
   space moves the cursor, enter selects. Drags speed up with the finger,
   keep going at the screen edge, and go by words after a second flick.
   Hold delete to repeat.
-- **Typing help.** Capitals at the start of a sentence, a period on a double
-  space.
-- **Symbols and emoji.** A symbols layer, and an emoji panel with recents and
-  skin tones.
+- **Emoji.** A panel with recents and skin tones.
 - **Make it yours.** Light, dark or custom colors, keyboard size, and keymaps:
   presets, a visual editor, or plain text for any long press and swipe.
 - **Private.** No network access, nothing typed is stored, and password fields
-  get no previews or recall. Works on the lock screen after a reboot.
+  get no previews or recall.
 
 ## Install
 
