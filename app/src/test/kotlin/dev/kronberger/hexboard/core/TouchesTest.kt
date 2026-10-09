@@ -13,7 +13,7 @@ class TouchesTest {
             ",/." to mapOf(Direction.UP_LEFT to "\""),
             "e" to mapOf(Direction.UP_LEFT to "é", Direction.DOWN_RIGHT to "è"),
         ),
-        longPress = mapOf("o" to "ö"),
+        longPress = mapOf("o" to "ö", ",/." to "…"),
     ).keys
     private val a = keys[0]
     private val b = keys[1]
@@ -344,6 +344,29 @@ class TouchesTest {
     }
 
     @Test
+    fun aFixedKeyLeftBehindStopsResting() {
+        val t = touches()
+        t.down(0, punct, 500f, 0f, emptyMap(), timeMs = 1000)
+        assertEquals(listOf(TouchEvent.Preview(punct, Gesture.Tap)), t.tick(1150))
+        assertEquals(listOf(TouchEvent.Preview(punct, null)), t.move(0, 440f, -20f, timeMs = 1200))
+        // No long press arms while swiping, and the swipe is read on lift.
+        assertEquals(none, t.tick(2000))
+        assertEquals(listOf(press(punct, Gesture.Swipe(Direction.UP_LEFT))), t.up(0, 440f, -20f))
+    }
+
+    @Test
+    fun aPressBetweenTwoFlicksBreaksTheWordChain() {
+        val t = touches(flickMs = 150)
+        t.down(0, a, 500f, 0f, emptyMap(), timeMs = 1000)
+        t.move(0, 445f, 0f, timeMs = 1010)
+        t.up(0, 445f, 0f, timeMs = 1050)
+        t.down(1, punct, 0f, 0f, emptyMap(), timeMs = 1100)
+        t.up(1, 0f, 0f, timeMs = 1120)
+        t.down(2, a, 500f, 0f, emptyMap(), timeMs = 1200)
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(2, 445f, 0f, timeMs = 1210))
+    }
+
+    @Test
     fun aSwipeAfterThePreviewTakesItBack() {
         val t = touches()
         t.down(0, o, 500f, 0f, emptyMap(), timeMs = 1000)
@@ -381,7 +404,7 @@ class TouchesTest {
         assertEquals(none, t.move(0, 0f, -60f, timeMs = 1050))
         assertTrue(t.ticking)
         assertEquals(none, t.tick(1249))
-        assertEquals(listOf(press(o, Gesture.HoldUp)), t.tick(1250))
+        assertEquals(listOf(TouchEvent.Armed(o), press(o, Gesture.HoldUp)), t.tick(1250))
         assertEquals(none, t.up(0, 0f, -60f))
     }
 

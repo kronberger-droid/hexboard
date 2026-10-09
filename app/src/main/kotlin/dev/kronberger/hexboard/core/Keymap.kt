@@ -70,6 +70,8 @@ object Keymaps {
 
     private val SUFFIXES = listOf(":move", ":select", ":fixed")
 
+    private val SECTION = Regex("""\[\s*[a-z]+\s*]""")
+
     private val DIRECTIONS = mapOf(
         "up" to Direction.UP,
         "up-right" to Direction.UP_RIGHT,
@@ -104,7 +106,7 @@ object Keymaps {
     fun write(keymap: Keymap): String {
         fun rows(layout: Layout) = ROW_LENGTHS.indices.joinToString("\n") { row ->
             (0 until ROW_LENGTHS[row]).joinToString(" ") { col ->
-                layout[Axial.fromRowCol(row, col)]?.let(::token) ?: "·"
+                layout[Axial.fromRowCol(row, col)]?.let { written(token(it)) } ?: "·"
             }
         }
         // One line per token, which sets that token's keys in both layers.
@@ -113,7 +115,7 @@ object Keymaps {
             if (key.longPress != null || key.alternates.isNotEmpty()) addOns.putIfAbsent(token(key), key)
         }
         val lines = addOns.map { (token, key) ->
-            val parts = mutableListOf(if (token.startsWith("#")) "hash" + token.drop(1) else token)
+            val parts = mutableListOf(written(token))
             key.longPress?.let { parts += "hold=$it" }
             for ((name, direction) in DIRECTIONS) key.alternates[direction]?.let { parts += "$name=$it" }
             parts.joinToString(" ")
@@ -121,6 +123,16 @@ object Keymaps {
         return Presets.HELP + "\n[letters]\n" + rows(keymap.letters) + "\n\n[symbols]\n" + rows(keymap.symbols) +
             "\n\n[keys]\n" + lines.joinToString("") { it + "\n" }
     }
+
+    /**
+     * [token] as it can be written at the start of a line: a line starting
+     * with `#` is a comment, so the `#` key goes as the word hash.
+     */
+    private fun written(token: String) =
+        if (token == "#" || token.startsWith("#/") || token.startsWith("#:")) "hash" + token.drop(1) else token
+
+    /** Keys that act rather than type, and so cannot take a long press. */
+    private val FUNCTION_KEYS = setOf("⌫", "⏎", "⇧", "123", "abc", "ABC", "😊")
 
     /** Parse [text]; throws [KeymapError] for the first problem found. */
     fun parse(text: String): Keymap {
@@ -131,7 +143,8 @@ object Keymaps {
             val line = raw.trim()
             when {
                 line.isEmpty() || line.startsWith("#") -> Unit
-                line.startsWith("[") && line.endsWith("]") -> {
+                // Only [word] is a section: a row may start with [ and end with ].
+                SECTION.matches(line) -> {
                     val name = line.substring(1, line.length - 1).trim()
                     if (name !in setOf("letters", "symbols", "keys")) throw KeymapError(n, "unknown section [$name]")
                     if (name in sections) throw KeymapError(n, "section [$name] given twice")
@@ -205,7 +218,10 @@ object Keymaps {
                 val split = base(token).let { it.length > 1 && "/" in it }
                 when {
                     name == "hold" -> {
-                        if (base(token) == "⌫") throw KeymapError(n, "⌫ repeats while held, so it takes no hold=")
+                        val halves = base(token).let { if (it.length > 1 && "/" in it) it.split("/", limit = 2) else listOf(it) }
+                        halves.firstOrNull { it in FUNCTION_KEYS }?.let {
+                            throw KeymapError(n, "$it acts rather than types, so it takes no hold=")
+                        }
                         longPress[token] = value
                     }
                     name in DIRECTIONS -> {

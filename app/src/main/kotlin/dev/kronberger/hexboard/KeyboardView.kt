@@ -15,7 +15,6 @@ import android.view.View
 import android.view.WindowInsets
 import dev.kronberger.hexboard.core.Direction
 import dev.kronberger.hexboard.core.Face
-import dev.kronberger.hexboard.core.Gesture
 import dev.kronberger.hexboard.core.HexGrid
 import dev.kronberger.hexboard.core.Key
 import dev.kronberger.hexboard.core.KeyAction
@@ -452,8 +451,6 @@ class KeyboardView(
     private fun handle(e: TouchEvent) {
         when (e) {
             is TouchEvent.Press -> {
-                // A long press already buzzed when it armed; one reached by resting after a swipe up did not.
-                if (e.gesture == Gesture.HoldUp) haptic(HapticFeedbackConstants.LONG_PRESS)
                 keyboard.resolve(e.key, e.gesture)?.let(onAction)
             }
             is TouchEvent.Armed -> haptic(HapticFeedbackConstants.LONG_PRESS)

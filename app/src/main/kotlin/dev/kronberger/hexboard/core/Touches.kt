@@ -301,7 +301,8 @@ class Touches(
 
     private fun holding(t: Touch) = t.key.longPress != null && still(t) && !t.armed
 
-    private fun holdingUp(t: Touch) = t.key.longPress != null && t.way == Way.UP && t.drag == null
+    // Only keys with a drag track where a finger rests after swiping up.
+    private fun holdingUp(t: Touch) = t.key.longPress != null && t.key.sideways != null && t.way == Way.UP && t.drag == null
 
     private fun resting(t: Touch) = t.key.repeats && still(t)
     /**
@@ -372,6 +373,7 @@ class Touches(
             // Up from an armed long press: the capital, at once.
             if (t.armY - y <= thresholdPx) return emptyList()
             active.remove(t)
+            lastFlick = null
             return listOf(TouchEvent.Press(t.key, Gesture.HoldUp))
         }
         val (prevX, prevMs, sampled) = Triple(t.lastX, t.lastMs, t.sampled)
@@ -379,7 +381,14 @@ class Touches(
         t.lastY = y
         t.lastMs = timeMs
         t.sampled = true
-        val sideways = t.key.sideways ?: return emptyList()
+        val sideways = t.key.sideways
+        if (sideways == null) {
+            // A fixed key reads its swipe on lift; once the finger leaves,
+            // though, it is no longer resting: no long press, preview or repeat.
+            if (t.way != null || hypot(x - t.x, y - t.y) < thresholdPx) return emptyList()
+            t.way = way(x - t.x, y - t.y)
+            return unshow(t)
+        }
         if (t.way == Way.UP) {
             // Still moving: the rest that makes a capital long press starts over.
             if (hypot(x - t.restX, y - t.restY) > thresholdPx / 2) rest(t, x, y, timeMs)
@@ -390,10 +399,16 @@ class Touches(
         t.way = way
         if (way == Way.UP) rest(t, x, y, timeMs)
         // A swipe or drag after all: take back what a tap would have typed.
-        val unshow = if (t.previewed) listOf(TouchEvent.Preview(t.key, null)) else emptyList()
+        val unshown = unshow(t)
+        if (way != Way.LEFT && way != Way.RIGHT) return unshown
+        return unshown + startDrag(t, sideways, way, x, timeMs, prevX, prevMs, sampled)
+    }
+
+    /** Take back what [t] shows provisionally, if anything. */
+    private fun unshow(t: Touch): List<TouchEvent> {
+        if (!t.previewed) return emptyList()
         t.previewed = false
-        if (way != Way.LEFT && way != Way.RIGHT) return unshow
-        return unshow + startDrag(t, sideways, way, x, timeMs, prevX, prevMs, sampled)
+        return listOf(TouchEvent.Preview(t.key, null))
     }
 
     private fun startDrag(
@@ -465,9 +480,11 @@ class Touches(
         }
         val heldUp = active.filter { holdingUp(it) && nowMs - it.restMs >= holdUpMs }
         active.removeAll(heldUp)
+        // Anything typed between two flicks breaks their word chain.
+        if (held.isNotEmpty() || heldUp.isNotEmpty()) lastFlick = null
         return shown.map { TouchEvent.Preview(it.key, Gesture.Tap) } +
             held.flatMap { listOf(TouchEvent.Armed(it.key), TouchEvent.Preview(it.key, Gesture.Hold)) } +
-            heldUp.map { TouchEvent.Press(it.key, Gesture.HoldUp) } +
+            heldUp.flatMap { listOf(TouchEvent.Armed(it.key), TouchEvent.Press(it.key, Gesture.HoldUp)) } +
             active.flatMap { t -> repeated(t, nowMs) } +
             active.mapNotNull { t -> push(t, nowMs) }
     }
@@ -477,6 +494,7 @@ class Touches(
         if (!t.repeating) {
             if (!resting(t) || nowMs - t.downMs < holdMs) return emptyList()
             t.repeating = true
+            lastFlick = null
             t.owed = 1f
         } else {
             t.owed += repeat.speed(nowMs - t.downMs - holdMs) * (nowMs - t.repeatedMs) / 1000f
@@ -525,8 +543,9 @@ class Touches(
         t.carry -= whole
         if (mayFlick(t)) {
             // Fast moves wait for the window to end, so a flick slowing
-            // down before it lifts does not show what it held back.
-            if (t.raw > flickPxPerS) {
+            // down before it lifts does not show what it held back. Word
+            // steps always wait: taking one back would not land where it began.
+            if (t.raw > flickPxPerS || t.words) {
                 t.held += whole
                 return null
             }
@@ -562,7 +581,10 @@ class Touches(
     private fun finished(t: Touch, x: Float, y: Float, timeMs: Long): List<TouchEvent> {
         // A repeating key already did its work.
         if (t.repeating) return emptyList()
-        if (t.armed) return listOf(TouchEvent.Press(t.key, Gesture.Hold))
+        if (t.armed) {
+            lastFlick = null
+            return listOf(TouchEvent.Press(t.key, Gesture.Hold))
+        }
         t.drag?.let { drag ->
             // A flick keeps only its first step. Otherwise land where the
             // finger lifted, even if no move event got there.
@@ -577,6 +599,9 @@ class Touches(
         }
         val dx = x - t.x
         val dy = y - t.y
+        // A press between two flicks breaks their word chain.
+        val chain = lastFlick
+        lastFlick = null
         val sideways = t.key.sideways ?: return listOf(TouchEvent.Press(t.key, classify(dx, dy, thresholdPx)))
         return when (val way = t.way ?: way(t.key, dx, dy)) {
             null -> listOf(TouchEvent.Press(t.key, Gesture.Tap))
@@ -586,6 +611,7 @@ class Touches(
             Way.LEFT, Way.RIGHT -> {
                 val drag = dragFor(sideways, way)
                 val step = firstStep(drag, way)
+                lastFlick = chain
                 val words = chained(drag, step, t.downMs)
                 lastFlick = Flick(drag, step, max(timeMs, t.downMs))
                 return listOfNotNull(
@@ -594,6 +620,6 @@ class Touches(
                     TouchEvent.Act(KeyAction.DragEnd(drag)),
                 )
             }
-        }.also { lastFlick = null }
+        }
     }
 }

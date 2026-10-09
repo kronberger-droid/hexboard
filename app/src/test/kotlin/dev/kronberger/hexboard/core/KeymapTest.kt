@@ -64,6 +64,15 @@ class KeymapTest {
     }
 
     @Test
+    fun aRowStartingWithTheHashKeyStillWritesAndParses() {
+        val dollar = Axial.fromRowCol(1, 0)
+        val hash = Axial.fromRowCol(4, 4)
+        val k = Keymaps.parse(default).swapped(symbols = true, dollar, hash)
+        assertEquals("#", k.symbols[dollar]?.face?.label)
+        assertEquals(k.symbols.keys, Keymaps.parse(Keymaps.write(k)).symbols.keys)
+    }
+
+    @Test
     fun theHashKeyIsWrittenAsAWordSinceHashStartsAComment() {
         val k = Keymaps.parse(default).withAddOns("#", "№", emptyMap())
         val text = Keymaps.write(k)
@@ -137,7 +146,9 @@ class KeymapTest {
     fun keysLinesAreChecked() {
         assertTrue(error(default + "ü hold=x\n").reason.contains("no key ü"))
         assertTrue(error(default + "a sideways=x\n").reason.contains("unknown sideways="))
-        assertTrue(error(default + "del hold=x\n").reason.contains("repeats"))
+        assertTrue(error(default + "del hold=x\n").reason.contains("acts rather than types"))
+        assertTrue(error(default + "enter:select hold=x\n").reason.contains("acts rather than types"))
+        assertTrue(error(default + "emoji/sym hold=x\n").reason.contains("acts rather than types"))
         assertTrue(error(default + ",/. up=x\n").reason.contains("split"))
         assertTrue(error(default + "a hold\n").reason.contains("name=text"))
         val line = (default + "q nope\n").lines().size - 1

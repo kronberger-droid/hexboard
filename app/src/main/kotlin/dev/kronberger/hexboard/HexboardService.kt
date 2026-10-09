@@ -313,13 +313,17 @@ class HexboardService : InputMethodService() {
     private fun preview(ic: InputConnection, text: String?) {
         if (text == null) {
             if (previewFrom < 0) return
+            ic.beginBatchEdit()
             ic.setComposingText("", 1)
             ic.finishComposingText()
+            ic.endBatchEdit()
             cursor.movedBySelf(previewFrom)
             previewFrom = -1
             return
         }
         if (!cursor.known) return
+        // Composing text would replace a selection, which a drag may still want.
+        if (previewFrom < 0 && cursor.start != cursor.end) return
         if (previewFrom < 0) previewFrom = cursor.start
         ic.setComposingText(text, 1)
         cursor.movedBySelf(previewFrom + text.length)
