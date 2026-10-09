@@ -1,27 +1,15 @@
-# hexboard
+<p align="center"><img src="docs/logo.svg" width="96" alt="Hexboard logo"></p>
 
-A hexagonal keyboard for Android in the spirit of Typewise, written in plain
-Kotlin on the Android framework: no AndroidX, no Compose, no third-party
-libraries.
+# Hexboard
 
-- Honeycomb layout with two space keys in the middle and split keys for
-  paired punctuation.
-- Swipe up for capitals, down for lowercase; shift and caps lock.
-  Sentences start with a capital, and a double space types a period.
-- Long-press or swipe up-right on `a o u s` for `ä ö ü ß`.
-- Drag left on almost any key to select backwards and delete, right to
-  bring the deletion back. Drags accelerate like a trackpad pointer: slow
-  for single characters, fast to cover distance.
-- Drag the left space to move the cursor, or enter to select.
-- Flick twice to go by words: a second flick within a moment moves,
-  selects or deletes a whole word, and flicking then dragging goes word
-  by word.
-- Symbols layer, an emoji panel with recents, and enter that follows the
-  text field's action.
-- Light, dark or custom colors for the background, keys, labels, space
-  keys and enter.
-- Keymaps as text, with presets: rearrange both layers and give any key
-  a long press and diagonal swipes (Settings, Edit keymap).
+A hexagonal keyboard for Android in the spirit of Typewise. Swipe a key
+for capitals and extras, drag sideways to delete, select or move the
+cursor, and make the layout your own.
+
+<p align="center">
+  <img src="docs/screenshots/dark.png" width="45%" alt="Hexboard in the dark theme">
+  <img src="docs/screenshots/light.png" width="45%" alt="Hexboard in the light theme">
+</p>
 
 ## Building
 
