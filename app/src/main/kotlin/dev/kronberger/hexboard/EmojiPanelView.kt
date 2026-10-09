@@ -103,8 +103,8 @@ class EmojiPanelView(
     }
 
     private fun buildGrid(): EmojiGrid {
-        val recent = recents.emoji.takeIf { it.isNotEmpty() }?.let { EmojiGroup(RECENT_TITLE, it) }
-        return EmojiGrid(listOfNotNull(recent) + catalog.value, COLUMNS)
+        // Always there, even empty, so the first pick does not shift the tabs.
+        return EmojiGrid(listOf(EmojiGroup(RECENT_TITLE, recents.emoji)) + catalog.value, COLUMNS)
     }
 
     /** Called when the panel is shown: picks up recents and starts at the top. */
@@ -178,7 +178,7 @@ class EmojiPanelView(
         emojiPaint.textSize = tabsHeight * 0.5f
         grid.sections.forEachIndexed { s, section ->
             val cx = contentLeft + (s + 0.5f) * tabWidth
-            val icon = if (section.name == RECENT_TITLE) "🕘" else section.emoji.first()
+            val icon = if (section.name == RECENT_TITLE) "🕘" else section.emoji.firstOrNull() ?: return@forEachIndexed
             canvas.drawText(icon, cx, baseline(tabsHeight / 2, emojiPaint), emojiPaint)
             if (s == current) canvas.drawRect(cx - tabWidth * 0.3f, tabsHeight - 3f * density, cx + tabWidth * 0.3f, tabsHeight, accent)
         }

@@ -93,4 +93,13 @@ class EmojiTest {
         assertEquals("👨\u200D🦰", withoutTone("👨🏿\u200D🦰"))
         assertEquals("😀", withoutTone("😀"))
     }
+
+    @Test
+    fun anEmptySectionIsJustItsHeader() {
+        val grid = EmojiGrid(listOf(EmojiGroup("Recent", emptyList()), EmojiGroup("A", listOf("1"))), columns = 2)
+        assertEquals(3, grid.rows.size)
+        assertEquals(1, grid.firstRowOf(1))
+        assertEquals(1, grid.sectionAt(2))
+        assertEquals(null, grid.at(0, 0))
+    }
 }
