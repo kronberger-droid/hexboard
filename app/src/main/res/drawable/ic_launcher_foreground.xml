@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated: a honeycomb flower of seven hexes, inside the adaptive icon's 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FF5A5A5A" android:pathData="M71.00,45.36 L78.48,49.68 L78.48,58.32 L71.00,62.64 L63.52,58.32 L63.52,49.68 Z" />
+    <path android:fillColor="#FF5A5A5A" android:pathData="M62.50,60.09 L69.98,64.40 L69.98,73.04 L62.50,77.36 L55.02,73.04 L55.02,64.40 Z" />
+    <path android:fillColor="#FF5A5A5A" android:pathData="M45.50,60.09 L52.98,64.40 L52.98,73.04 L45.50,77.36 L38.02,73.04 L38.02,64.40 Z" />
+    <path android:fillColor="#FF5A5A5A" android:pathData="M37.00,45.36 L44.48,49.68 L44.48,58.32 L37.00,62.64 L29.52,58.32 L29.52,49.68 Z" />
+    <path android:fillColor="#FF5A5A5A" android:pathData="M45.50,30.64 L52.98,34.96 L52.98,43.60 L45.50,47.91 L38.02,43.60 L38.02,34.96 Z" />
+    <path android:fillColor="#FF5A5A5A" android:pathData="M62.50,30.64 L69.98,34.96 L69.98,43.60 L62.50,47.91 L55.02,43.60 L55.02,34.96 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M54.00,45.36 L61.48,49.68 L61.48,58.32 L54.00,62.64 L46.52,58.32 L46.52,49.68 Z" />
+</vector>

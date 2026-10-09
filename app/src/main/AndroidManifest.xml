@@ -3,6 +3,8 @@
 
     <application
         android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="false">
 
         <!-- exported is required from targetSdk 31; BIND_INPUT_METHOD keeps
