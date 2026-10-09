@@ -21,6 +21,11 @@ class Prefs(val shared: SharedPreferences) {
     operator fun set(s: Slider, value: Int) = shared.edit().putInt(s.key, value).apply()
     operator fun set(c: Choice, value: Int) = shared.edit().putInt(c.key, value).apply()
 
+    /** Recently picked emoji, as [dev.kronberger.hexboard.core.Recents] stores them. */
+    var recentEmoji: String?
+        get() = shared.getString("recent_emoji", null)
+        set(value) = shared.edit().putString("recent_emoji", value).apply()
+
     /** The user's keymap text, or null for the default preset. */
     var keymap: String?
         get() = shared.getString("keymap", null)
@@ -42,8 +47,8 @@ class Prefs(val shared: SharedPreferences) {
         fun of(context: Context): Prefs {
             val device = context.createDeviceProtectedStorageContext()
             if (!moved && context.getSystemService(UserManager::class.java).isUserUnlocked) {
-                device.moveSharedPreferencesFrom(context, NAME)
-                moved = true
+                // True when moved or when there was nothing to move.
+                moved = device.moveSharedPreferencesFrom(context, NAME)
             }
             return Prefs(device.getSharedPreferences(NAME, Context.MODE_PRIVATE))
         }

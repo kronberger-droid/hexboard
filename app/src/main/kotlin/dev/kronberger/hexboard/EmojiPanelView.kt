@@ -1,7 +1,6 @@
 package dev.kronberger.hexboard
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
@@ -32,7 +31,8 @@ class EmojiPanelView(
     context: Context,
     /** Loaded on first open, not when the keyboard first shows. */
     private val catalog: Lazy<List<EmojiGroup>>,
-    private val prefs: SharedPreferences,
+    /** Asked again on every opening, so a migration in between is seen. */
+    private val prefs: () -> Prefs,
     private val sizeLike: View,
     private val onAction: (KeyAction) -> Unit,
 ) : View(context) {
@@ -42,7 +42,10 @@ class EmojiPanelView(
     private val barHeight = 48f * density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
-    private val recents = Recents.parse(prefs.getString(RECENTS_KEY, null))
+    private var recents = Recents()
+
+    /** Whether picks go into the recents; not in a password field. */
+    private var remember = true
     /** Empty until the first [refresh], which runs before the panel is ever shown. */
     private var grid = EmojiGrid(emptyList(), COLUMNS)
 
@@ -97,7 +100,6 @@ class EmojiPanelView(
     }
 
     private companion object {
-        const val RECENTS_KEY = "recent_emoji"
         const val RECENT_TITLE = "Recent"
         const val COLUMNS = 8
     }
@@ -108,8 +110,10 @@ class EmojiPanelView(
     }
 
     /** Called when the panel is shown: picks up recents and starts at the top. */
-    fun refresh() {
-        val settings = Prefs(prefs)
+    fun refresh(remember: Boolean) {
+        this.remember = remember
+        val settings = prefs()
+        recents = Recents.parse(settings.recentEmoji)
         haptics = settings[Settings.haptics]
         longPressMs = settings[Settings.longPress].toLong()
         grid = buildGrid()
@@ -240,8 +244,9 @@ class EmojiPanelView(
         onAction(KeyAction.Text(e))
         // Saved now, shown next time the panel opens, so the grid
         // does not shift under the finger.
+        if (!remember) return
         recents.used(e)
-        prefs.edit().putString(RECENTS_KEY, recents.serialize()).apply()
+        prefs().recentEmoji = recents.serialize()
     }
 
     /** Horizontal extents of the bottom row's three buttons, with gaps. */

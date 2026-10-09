@@ -98,7 +98,13 @@ class HexboardService : InputMethodService() {
     /** The keymap text the keyboard's layers were last built from. */
     private var loadedKeymap: String? = null
     private var keymapLoaded = false
-    private val prefs by lazy { Prefs.of(this) }
+    /** Fetched again whenever the keyboard opens; see [Prefs.of] on why. */
+    private lateinit var prefs: Prefs
+
+    override fun onCreate() {
+        super.onCreate()
+        prefs = Prefs.of(this)
+    }
     private var view: KeyboardView? = null
     private var emojiPanel: EmojiPanelView? = null
 
@@ -109,7 +115,7 @@ class HexboardService : InputMethodService() {
      */
     override fun onCreateInputView(): View {
         val keys = KeyboardView(this, keyboard, ::onAction)
-        val panel = EmojiPanelView(this, lazy { emojiCatalog() }, prefs.shared, keys, ::onAction)
+        val panel = EmojiPanelView(this, lazy { emojiCatalog() }, { prefs }, keys, ::onAction)
         panel.visibility = View.GONE
         view = keys
         emojiPanel = panel
@@ -130,13 +136,14 @@ class HexboardService : InputMethodService() {
 
     private fun showEmoji(show: Boolean) {
         val panel = emojiPanel ?: return
-        if (show) panel.refresh()
+        if (show) panel.refresh(remember = !inPassword())
         panel.visibility = if (show) View.VISIBLE else View.GONE
         view?.visibility = if (show) View.INVISIBLE else View.VISIBLE
     }
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        prefs = Prefs.of(this)
         loadKeymap()
         // Numbers, phone numbers and dates start on the layer with digits.
         keyboard.showingSymbols = when (info.inputType and InputType.TYPE_MASK_CLASS) {
@@ -321,7 +328,7 @@ class HexboardService : InputMethodService() {
             previewFrom = -1
             return
         }
-        if (!cursor.known) return
+        if (!cursor.known || inPassword()) return
         // Composing text would replace a selection, which a drag may still want.
         if (previewFrom < 0 && cursor.start != cursor.end) return
         if (previewFrom < 0) previewFrom = cursor.start
@@ -336,7 +343,7 @@ class HexboardService : InputMethodService() {
             val selected = ic.getSelectedText(0)?.toString()
             ic.commitText("", 1)
             cursor.movedBySelf(start)
-            if (selected != null) recall.record(selected, end, start) else recall.clear()
+            if (selected != null) remember(selected, end, start) else recall.clear()
             return
         }
         val before = ic.getTextBeforeCursor(LOOKBACK, 0)
@@ -352,7 +359,7 @@ class HexboardService : InputMethodService() {
         ic.deleteSurroundingText(length, 0)
         val from = cursor.start
         cursor.movedBySelf(from - length)
-        recall.record(before.substring(start), from, from - length)
+        remember(before.substring(start), from, from - length)
     }
 
     private fun scrubBy(ic: InputConnection, delta: Int, words: Boolean) {
@@ -411,7 +418,26 @@ class HexboardService : InputMethodService() {
         ic.commitText("", 1)
         ic.endBatchEdit()
         cursor.movedBySelf(start)
-        recall.record(s.before.substring(s.before.length - (s.cursor - start)), s.cursor, start)
+        // The editor may have changed the text under the scrub; then there
+        // is nothing reliable to bring back.
+        val deleted = s.cursor - start
+        if (deleted in 0..s.before.length) remember(s.before.takeLast(deleted), s.cursor, start) else recall.clear()
+    }
+
+    /** Keep [text] deleted at [from]..[to] for recall, except in a password field. */
+    private fun remember(text: String, from: Int, to: Int) {
+        if (inPassword()) recall.clear() else recall.record(text, from, to)
+    }
+
+    /** Whether the field takes a password, whose characters the keyboard keeps nowhere. */
+    private fun inPassword(): Boolean {
+        val type = currentInputEditorInfo?.inputType ?: return false
+        val variation = type and InputType.TYPE_MASK_VARIATION
+        return when (type and InputType.TYPE_MASK_CLASS) {
+            InputType.TYPE_CLASS_TEXT -> variation in PASSWORD_VARIATIONS
+            InputType.TYPE_CLASS_NUMBER -> variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            else -> false
+        }
     }
 
     /**
@@ -420,6 +446,10 @@ class HexboardService : InputMethodService() {
      * heading anyway.
      */
     private fun reachFurther(ic: InputConnection, s: Scrub) {
+        if (s.before.length >= REACH) {
+            s.more = false
+            return
+        }
         val from = s.cursor - s.before.length
         ic.setSelection(from, s.cursor)
         cursor.movedBySelf(from, s.cursor)
@@ -528,6 +558,11 @@ class HexboardService : InputMethodService() {
      * to that end, where the drag is heading anyway.
      */
     private fun reachFurther(ic: InputConnection, t: Travel, drag: Drag, left: Boolean) {
+        if (t.text.length >= REACH) {
+            t.moreBefore = false
+            t.moreAfter = false
+            return
+        }
         val edge = if (left) t.start else t.end
         val (a, b) = if (drag == Drag.SELECT) minOf(t.anchor, edge) to maxOf(t.anchor, edge) else edge to edge
         ic.setSelection(a, b)
@@ -644,5 +679,19 @@ class HexboardService : InputMethodService() {
 
         /** How much text a drag fetches at a time on either side of where it is. */
         const val WINDOW = 2000
+
+        /**
+         * The most text one drag fetches in all. Each fetch re-finds the
+         * clusters of everything so far, so this keeps a drag through a huge
+         * document from stalling the keyboard.
+         */
+        const val REACH = 20 * WINDOW
+
+        /** Text field variations that take a password. */
+        val PASSWORD_VARIATIONS = setOf(
+            InputType.TYPE_TEXT_VARIATION_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+        )
     }
 }

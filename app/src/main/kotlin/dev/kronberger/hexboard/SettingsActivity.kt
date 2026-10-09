@@ -2,6 +2,7 @@ package dev.kronberger.hexboard
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
@@ -18,6 +19,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Switch
+import android.widget.Toast
 import dev.kronberger.hexboard.core.Choice
 import dev.kronberger.hexboard.core.ColorSetting
 import dev.kronberger.hexboard.core.Setting
@@ -125,7 +127,12 @@ class SettingsActivity : Activity() {
                 null,
                 listOf(
                     look.row("About", "Hexboard $version · source on GitHub") {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/kronberger-droid/hexboard")))
+                        // A phone without a browser has nothing to open it with.
+                        try {
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/kronberger-droid/hexboard")))
+                        } catch (_: ActivityNotFoundException) {
+                            Toast.makeText(this, "No app to open github.com/kronberger-droid/hexboard", Toast.LENGTH_LONG).show()
+                        }
                     },
                 ),
             ),
