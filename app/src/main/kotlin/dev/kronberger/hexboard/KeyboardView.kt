@@ -89,6 +89,9 @@ class KeyboardView(
     /** The key under each finger since it went down, lit until it lifts. */
     private val pressed = mutableMapOf<Int, Key>()
 
+    /** Keys whose long press is armed; they show what it will type. */
+    private val armed = mutableSetOf<Key>()
+
     private var touches = buildTouches(
         SWIPE_THRESHOLD_DP, DRAG_STEP_DP, DRAG_GAIN_MAX, DRAG_EDGE_RATE_MAX, LONG_PRESS_MS, HOLD_UP_MS,
     )
@@ -285,6 +288,12 @@ class KeyboardView(
             } else if (key in lit) {
                 canvas.drawCircle(x, c.y, g.radius * 0.6f, pressedFill)
             }
+            val held = key.longPress?.takeIf { key in armed }
+            if (held != null) {
+                // The long press is due: show what lifting will type, hints aside.
+                drawFace(canvas, Face(held, KeyAction.Text(held)), x, c.y)
+                continue
+            }
             if (key.lower == null) {
                 drawFace(canvas, key.face, x, c.y)
             } else {
@@ -438,6 +447,7 @@ class KeyboardView(
             }
             MotionEvent.ACTION_CANCEL -> {
                 pressed.clear()
+                armed.clear()
                 invalidate()
                 out += touches.cancel()
             }
@@ -450,11 +460,15 @@ class KeyboardView(
     private fun handle(e: TouchEvent) {
         when (e) {
             is TouchEvent.Press -> {
+                armed.remove(e.key)
                 // A long press already buzzed when it armed; one reached by resting after a swipe up did not.
                 if (e.gesture == Gesture.HoldUp) haptic(HapticFeedbackConstants.LONG_PRESS)
                 keyboard.resolve(e.key, e.gesture)?.let(onAction)
             }
-            is TouchEvent.Armed -> haptic(HapticFeedbackConstants.LONG_PRESS)
+            is TouchEvent.Armed -> {
+                armed += e.key
+                haptic(HapticFeedbackConstants.LONG_PRESS)
+            }
             is TouchEvent.Act -> onAction(e.action)
         }
         invalidate()
