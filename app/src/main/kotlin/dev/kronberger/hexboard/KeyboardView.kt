@@ -20,6 +20,7 @@ import dev.kronberger.hexboard.core.HexGrid
 import dev.kronberger.hexboard.core.Key
 import dev.kronberger.hexboard.core.KeyAction
 import dev.kronberger.hexboard.core.Keyboard
+import dev.kronberger.hexboard.core.HOLD_UP_MS
 import dev.kronberger.hexboard.core.LONG_PRESS_MS
 import dev.kronberger.hexboard.core.Layout
 import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
@@ -89,10 +90,17 @@ class KeyboardView(
     private val pressed = mutableMapOf<Int, Key>()
 
     private var touches = buildTouches(
-        SWIPE_THRESHOLD_DP, DRAG_STEP_DP, DRAG_GAIN_MAX, DRAG_EDGE_RATE_MAX, LONG_PRESS_MS,
+        SWIPE_THRESHOLD_DP, DRAG_STEP_DP, DRAG_GAIN_MAX, DRAG_EDGE_RATE_MAX, LONG_PRESS_MS, HOLD_UP_MS,
     )
 
-    private fun buildTouches(swipeDp: Float, stepDp: Float, gainMax: Float, edgeRate: Float, longPressMs: Long) = Touches(
+    private fun buildTouches(
+        swipeDp: Float,
+        stepDp: Float,
+        gainMax: Float,
+        edgeRate: Float,
+        longPressMs: Long,
+        holdUpMs: Long,
+    ) = Touches(
         swipeDp * density,
         DragGain(stepDp * density, DRAG_SLOW_DP_S * density, DRAG_FAST_DP_S * density, gainMax, DRAG_SMOOTH_MS),
         DRAG_FLICK_MS,
@@ -100,6 +108,7 @@ class KeyboardView(
         DragEdge(DRAG_EDGE_DP * density, DRAG_EDGE_RATE_START, edgeRate, DRAG_EDGE_RAMP_MS),
         longPressMs,
         Ramp(REPEAT_RATE_START, REPEAT_RATE_MAX, REPEAT_RAMP_MS),
+        holdUpMs,
     )
 
     /** Take up the user's settings; called whenever the keyboard opens. */
@@ -122,6 +131,7 @@ class KeyboardView(
             p[Settings.dragGain].toFloat(),
             p[Settings.edgeRate].toFloat(),
             p[Settings.longPress].toLong(),
+            p[Settings.holdUp].toLong(),
         )
         builtFor = null
     }
@@ -440,9 +450,11 @@ class KeyboardView(
     private fun handle(e: TouchEvent) {
         when (e) {
             is TouchEvent.Press -> {
-                if (e.gesture == Gesture.Hold || e.gesture == Gesture.HoldUp) haptic(HapticFeedbackConstants.LONG_PRESS)
+                // A long press already buzzed when it armed; one reached by resting after a swipe up did not.
+                if (e.gesture == Gesture.HoldUp) haptic(HapticFeedbackConstants.LONG_PRESS)
                 keyboard.resolve(e.key, e.gesture)?.let(onAction)
             }
+            is TouchEvent.Armed -> haptic(HapticFeedbackConstants.LONG_PRESS)
             is TouchEvent.Act -> onAction(e.action)
         }
         invalidate()

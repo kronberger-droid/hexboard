@@ -13,6 +13,9 @@ import kotlin.math.roundToInt
 sealed interface TouchEvent {
     data class Press(val key: Key, val gesture: Gesture) : TouchEvent
     data class Act(val action: KeyAction) : TouchEvent
+
+    /** A long press on [key] is due; what it types is decided when the finger lifts or swipes up. */
+    data class Armed(val key: Key) : TouchEvent
 }
 
 /**
@@ -165,10 +168,11 @@ const val REPEAT_RAMP_MS = 2000f
  * runs are ignored.
  *
  * A finger resting on a key with a [Key.longPress] for [holdMs], without
- * passing the threshold, is finished there with [Gesture.Hold], also from
- * [tick]. One that swiped up on such a key and then rests, moving less than
- * half the threshold, for [holdMs] is finished with [Gesture.HoldUp], also from
- * [tick]; lifting it later does nothing more. One resting as long on a key
+ * passing the threshold, arms it from [tick] ([TouchEvent.Armed]): swiping
+ * up from there finishes it with [Gesture.HoldUp], lifting with
+ * [Gesture.Hold]. One that swiped up on such a key and then rests, moving
+ * less than half the threshold, for [holdUpMs] is finished with
+ * [Gesture.HoldUp] from [tick]; lifting it later does nothing more. One resting as long on a key
  * that [Key.repeats] starts tapping it from [tick], at the [repeat] rate,
  * until it lifts or another finger lands.
  *
@@ -184,6 +188,7 @@ class Touches(
     private val edge: DragEdge,
     private val holdMs: Long,
     private val repeat: Ramp,
+    private val holdUpMs: Long,
 ) {
     /** Horizontal extent of the keyboard the finger can reach, in px. */
     private var left = Float.NEGATIVE_INFINITY
@@ -210,6 +215,11 @@ class Touches(
         var way: Way? = null
         var drag: Drag? = null
         var lastX = x
+        var lastY = y
+
+        /** A long press is due, armed with the finger at [armY]. */
+        var armed = false
+        var armY = 0f
         var lastMs = 0L
         var startMs = 0L
 
@@ -280,7 +290,7 @@ class Touches(
     /** Still, short of the threshold: nothing decided yet. */
     private fun still(t: Touch) = t.drag == null && t.way == null
 
-    private fun holding(t: Touch) = t.key.longPress != null && still(t)
+    private fun holding(t: Touch) = t.key.longPress != null && still(t) && !t.armed
 
     private fun holdingUp(t: Touch) = t.key.longPress != null && t.way == Way.UP && t.drag == null
 
@@ -349,8 +359,15 @@ class Touches(
         val t = active.find { it.id == id } ?: return emptyList()
         if (t.drag != null) return listOfNotNull(glide(t, x, timeMs))
         if (t.repeating) return emptyList()
+        if (t.armed) {
+            // Up from an armed long press: the capital, at once.
+            if (t.armY - y <= thresholdPx) return emptyList()
+            active.remove(t)
+            return listOf(TouchEvent.Press(t.key, Gesture.HoldUp))
+        }
         val (prevX, prevMs, sampled) = Triple(t.lastX, t.lastMs, t.sampled)
         t.lastX = x
+        t.lastY = y
         t.lastMs = timeMs
         t.sampled = true
         val sideways = t.key.sideways ?: return emptyList()
@@ -415,9 +432,13 @@ class Touches(
      */
     fun tick(nowMs: Long): List<TouchEvent> {
         val held = active.filter { holding(it) && nowMs - it.downMs >= holdMs }
-        val heldUp = active.filter { holdingUp(it) && nowMs - it.restMs >= holdMs }
-        active.removeAll(held + heldUp)
-        return held.map { TouchEvent.Press(it.key, Gesture.Hold) } +
+        for (t in held) {
+            t.armed = true
+            t.armY = t.lastY
+        }
+        val heldUp = active.filter { holdingUp(it) && nowMs - it.restMs >= holdUpMs }
+        active.removeAll(heldUp)
+        return held.map { TouchEvent.Armed(it.key) } +
             heldUp.map { TouchEvent.Press(it.key, Gesture.HoldUp) } +
             active.flatMap { t -> repeated(t, nowMs) } +
             active.mapNotNull { t -> push(t, nowMs) }
@@ -510,6 +531,7 @@ class Touches(
     private fun finished(t: Touch, x: Float, y: Float, timeMs: Long): List<TouchEvent> {
         // A repeating key already did its work.
         if (t.repeating) return emptyList()
+        if (t.armed) return listOf(TouchEvent.Press(t.key, Gesture.Hold))
         t.drag?.let { drag ->
             // A flick keeps only its first step. Otherwise land where the
             // finger lifted, even if no move event got there.

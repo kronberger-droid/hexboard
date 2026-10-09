@@ -15,7 +15,7 @@ sealed interface Gesture {
     /** A finger rested on the key for [LONG_PRESS_MS] without swiping. */
     data object Hold : Gesture
 
-    /** A finger swiped up and then rested for [LONG_PRESS_MS]: the long press as a capital. */
+    /** A long press then a swipe up, or a swipe up then a rest: the long press as a capital. */
     data object HoldUp : Gesture
 }
 
@@ -24,6 +24,9 @@ const val SWIPE_THRESHOLD_DP = 18f
 
 /** How long a finger rests on a key with a [Key.longPress] before it types that. */
 const val LONG_PRESS_MS = 350L
+
+/** How long a finger rests after swiping up before that types the long press as a capital. */
+const val HOLD_UP_MS = 200L
 
 /**
  * Classify a touch by its displacement from touch down to release, in

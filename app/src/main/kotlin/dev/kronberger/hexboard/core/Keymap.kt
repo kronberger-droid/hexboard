@@ -265,7 +265,8 @@ object Presets {
 # [keys] adds to keys by their text, in both layers, e.g.
 #   a hold=ä up-left=á down-left=à
 # hold= is typed on a long press and on a swipe up-right, and as a capital
-# when the finger swipes up and then rests. Swipes go up,
+# on a long press then a swipe up, or a swipe up then a short rest. Swipes
+# go up,
 # down, up-left, up-right, down-left, down-right. On a key with a drag a
 # diagonal takes a narrow band and the drag stays. On plain letters up and
 # down are capitals and lowercase unless set here. Write hash for the #

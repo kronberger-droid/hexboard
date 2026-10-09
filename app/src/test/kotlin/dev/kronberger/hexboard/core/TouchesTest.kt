@@ -37,12 +37,12 @@ class TouchesTest {
     private val edge = DragEdge(zonePx = 100f, startPerS = 10f, maxPerS = 110f, rampMs = 1000f)
     // Flicks, where tested, are drags faster than 300px/s lifted within 150ms.
     // Long presses fire after 300ms.
-    private fun touches(flickMs: Long = 0) = Touches(50f, gain, flickMs, flickPxPerS = 300f, edge = edge, holdMs = 300, repeat = repeat)
+    private fun touches(flickMs: Long = 0) = Touches(50f, gain, flickMs, flickPxPerS = 300f, edge = edge, holdMs = 300, repeat = repeat, holdUpMs = 200)
 
     // A keyboard 1000px wide with edge strips of 100px, and a flat gain of
     // one cluster per 10px so only the edge changes speed.
     private fun edged(flickMs: Long = 0) =
-        Touches(50f, DragGain(10f, 1e6f, 2e6f, 1f, 0f), flickMs, 300f, edge, holdMs = 300, repeat = repeat).also { it.span(0f, 1000f) }
+        Touches(50f, DragGain(10f, 1e6f, 2e6f, 1f, 0f), flickMs, 300f, edge, holdMs = 300, repeat = repeat, holdUpMs = 200).also { it.span(0f, 1000f) }
 
     private fun press(key: Key, g: Gesture = tap) = TouchEvent.Press(key, g)
     private fun by(drag: Drag, delta: Int) = TouchEvent.Act(KeyAction.DragBy(drag, delta))
@@ -335,9 +335,20 @@ class TouchesTest {
         assertTrue(t.ticking)
         assertEquals(none, t.tick(1299))
         t.move(0, 10f, 5f, timeMs = 1200)
-        assertEquals(listOf(press(o, Gesture.Hold)), t.tick(1300))
+        assertEquals(listOf(TouchEvent.Armed(o)), t.tick(1300))
         assertFalse(t.ticking)
-        assertEquals(none, t.up(0, 10f, 5f))
+        // Lifting without swiping up types it as it is.
+        assertEquals(listOf(press(o, Gesture.Hold)), t.up(0, 10f, 5f))
+    }
+
+    @Test
+    fun swipingUpFromAnArmedLongPressGivesTheCapital() {
+        val t = touches()
+        t.down(0, o, 0f, 0f, emptyMap(), timeMs = 1000)
+        t.tick(1300)
+        assertEquals(none, t.move(0, 0f, -40f, timeMs = 1350))
+        assertEquals(listOf(press(o, Gesture.HoldUp)), t.move(0, 0f, -60f, timeMs = 1400))
+        assertEquals(none, t.up(0, 0f, -60f))
     }
 
     @Test
@@ -346,8 +357,8 @@ class TouchesTest {
         t.down(0, o, 0f, 0f, emptyMap(), timeMs = 1000)
         assertEquals(none, t.move(0, 0f, -60f, timeMs = 1050))
         assertTrue(t.ticking)
-        assertEquals(none, t.tick(1349))
-        assertEquals(listOf(press(o, Gesture.HoldUp)), t.tick(1350))
+        assertEquals(none, t.tick(1249))
+        assertEquals(listOf(press(o, Gesture.HoldUp)), t.tick(1250))
         assertEquals(none, t.up(0, 0f, -60f))
     }
 
