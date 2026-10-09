@@ -2,6 +2,8 @@ package dev.kronberger.hexboard
 
 import android.content.res.Configuration
 import android.content.res.Resources
+import dev.kronberger.hexboard.core.blend
+import dev.kronberger.hexboard.core.lightness
 
 /** The keyboard's colors, as opaque ARGB. */
 data class Palette(
@@ -41,6 +43,23 @@ data class Palette(
             label = 0xff1b1b1b.toInt(),
             hint = 0xff6b6f76.toInt(),
             light = true,
+        )
+
+        /**
+         * A palette from five chosen colors. The split keys' lower half, the
+         * pressed key and the hints are mixed from them, and the system bars
+         * get dark icons on a light [background].
+         */
+        fun custom(background: Int, key: Int, label: Int, space: Int, enter: Int) = Palette(
+            background = background,
+            key = key,
+            lower = blend(key, background, 0.25f),
+            space = space,
+            enter = enter,
+            pressed = blend(key, label, 0.35f),
+            label = label,
+            hint = blend(label, key, 0.4f),
+            light = lightness(background) > 0.5f,
         )
 
         /** The palette matching the system's dark mode. */

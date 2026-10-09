@@ -18,6 +18,8 @@ libraries.
   by word.
 - Symbols layer, an emoji panel with recents, and enter that follows the
   text field's action.
+- Light, dark or custom colors for the background, keys, labels, space
+  keys and enter.
 - Keymaps as text, with presets: rearrange both layers and give any key
   a long press and diagonal swipes (Settings, Edit keymap).
 

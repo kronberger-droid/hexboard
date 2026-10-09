@@ -5,10 +5,15 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings as SystemSettings
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
+import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -17,6 +22,9 @@ import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import dev.kronberger.hexboard.core.Choice
+import dev.kronberger.hexboard.core.ColorSetting
+import dev.kronberger.hexboard.core.formatColor
+import dev.kronberger.hexboard.core.parseColor
 import dev.kronberger.hexboard.core.Setting
 import dev.kronberger.hexboard.core.Settings
 import dev.kronberger.hexboard.core.Slider
@@ -75,6 +83,38 @@ class SettingsActivity : Activity() {
 
                         override fun onStartTrackingTouch(bar: SeekBar) = Unit
                         override fun onStopTrackingTouch(bar: SeekBar) = Unit
+                    })
+                },
+            )
+            spaced()
+        }
+        is ColorSetting -> LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val side = (28 * dp).toInt()
+            val swatch = View(context).apply { setBackgroundColor(prefs[s]) }
+            addView(TextView(context).apply { text = s.title }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(swatch, LinearLayout.LayoutParams(side, side))
+            addView(
+                EditText(context).apply {
+                    setText(formatColor(prefs[s]))
+                    isSingleLine = true
+                    setEms(5)
+                    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                    addTextChangedListener(object : TextWatcher {
+                        override fun afterTextChanged(text: Editable) {
+                            val color = parseColor(text.toString())
+                            if (color == null) {
+                                error = "#RRGGBB"
+                                return
+                            }
+                            error = null
+                            prefs[s] = color
+                            swatch.setBackgroundColor(color)
+                        }
+
+                        override fun beforeTextChanged(text: CharSequence, start: Int, count: Int, after: Int) = Unit
+                        override fun onTextChanged(text: CharSequence, start: Int, before: Int, count: Int) = Unit
                     })
                 },
             )

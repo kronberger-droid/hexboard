@@ -300,7 +300,7 @@ class KeyboardView(
     private fun drawFace(canvas: Canvas, face: Face, x: Float, y: Float) {
         when (face.action) {
             KeyAction.Space -> Unit
-            KeyAction.Emoji -> drawSmiley(canvas, x, y, labelPaint.textSize * 0.42f)
+            KeyAction.Emoji -> drawSmiley(canvas, x, y, labelPaint.textSize * 0.34f)
             // Dim when off, bright for one capital, caps-lock glyph when locked.
             KeyAction.Shift -> {
                 labelPaint.alpha = if (keyboard.shift == ShiftState.OFF) 0x80 else 0xff
