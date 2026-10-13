@@ -19,31 +19,26 @@ import dev.kronberger.hexboard.core.HexGrid
 import dev.kronberger.hexboard.core.Key
 import dev.kronberger.hexboard.core.KeyAction
 import dev.kronberger.hexboard.core.Keyboard
-import dev.kronberger.hexboard.core.HOLD_UP_MS
-import dev.kronberger.hexboard.core.LONG_PRESS_MS
 import dev.kronberger.hexboard.core.PREVIEW_MS
 import dev.kronberger.hexboard.core.Layout
-import dev.kronberger.hexboard.core.SWIPE_THRESHOLD_DP
 import dev.kronberger.hexboard.core.Settings
 import dev.kronberger.hexboard.core.ShiftState
+import dev.kronberger.hexboard.core.Slider
 import dev.kronberger.hexboard.core.Point
 import dev.kronberger.hexboard.core.REPEAT_RAMP_MS
-import dev.kronberger.hexboard.core.REPEAT_RATE_MAX
 import dev.kronberger.hexboard.core.REPEAT_RATE_START
 import dev.kronberger.hexboard.core.Ramp
 import dev.kronberger.hexboard.core.DRAG_EDGE_DP
 import dev.kronberger.hexboard.core.DRAG_EDGE_RAMP_MS
-import dev.kronberger.hexboard.core.DRAG_EDGE_RATE_MAX
 import dev.kronberger.hexboard.core.DRAG_EDGE_RATE_START
 import dev.kronberger.hexboard.core.DRAG_FAST_DP_S
 import dev.kronberger.hexboard.core.DRAG_FLICK_DP_S
-import dev.kronberger.hexboard.core.DRAG_FLICK_MS
-import dev.kronberger.hexboard.core.DRAG_GAIN_MAX
 import dev.kronberger.hexboard.core.DRAG_SLOW_DP_S
 import dev.kronberger.hexboard.core.DRAG_SMOOTH_MS
-import dev.kronberger.hexboard.core.DRAG_STEP_DP
+import dev.kronberger.hexboard.core.Drag
 import dev.kronberger.hexboard.core.DragEdge
 import dev.kronberger.hexboard.core.DragGain
+import dev.kronberger.hexboard.core.Toggle
 import dev.kronberger.hexboard.core.TouchEvent
 import dev.kronberger.hexboard.core.Touches
 import dev.kronberger.hexboard.core.coalesce
@@ -89,28 +84,31 @@ class KeyboardView(
     /** The key under each finger since it went down, lit until it lifts. */
     private val pressed = mutableMapOf<Int, Key>()
 
-    private var touches = buildTouches(
-        SWIPE_THRESHOLD_DP, DRAG_STEP_DP, DRAG_GAIN_MAX, DRAG_EDGE_RATE_MAX, LONG_PRESS_MS, HOLD_UP_MS,
-    )
+    private var touches = buildTouches({ it.default }, { it.default })
 
-    private fun buildTouches(
-        swipeDp: Float,
-        stepDp: Float,
-        gainMax: Float,
-        edgeRate: Float,
-        longPressMs: Long,
-        holdUpMs: Long,
-    ) = Touches(
-        swipeDp * density,
-        DragGain(stepDp * density, DRAG_SLOW_DP_S * density, DRAG_FAST_DP_S * density, gainMax, DRAG_SMOOTH_MS),
-        DRAG_FLICK_MS,
-        DRAG_FLICK_DP_S * density,
-        DragEdge(DRAG_EDGE_DP * density, DRAG_EDGE_RATE_START, edgeRate, DRAG_EDGE_RAMP_MS),
-        longPressMs,
-        Ramp(REPEAT_RATE_START, REPEAT_RATE_MAX, REPEAT_RAMP_MS),
-        holdUpMs,
-        PREVIEW_MS,
-    )
+    /** Touch handling as the settings [slider] and [toggle] read them. */
+    private fun buildTouches(slider: (Slider) -> Int, toggle: (Toggle) -> Boolean): Touches {
+        val wordDrags = buildSet {
+            if (toggle(Settings.wordDelete)) add(Drag.SCRUB)
+            if (toggle(Settings.wordMove)) addAll(listOf(Drag.MOVE, Drag.SELECT))
+        }
+        return Touches(
+            slider(Settings.swipe) * density,
+            DragGain(
+                slider(Settings.dragStep) * density, DRAG_SLOW_DP_S * density, DRAG_FAST_DP_S * density,
+                slider(Settings.dragGain).toFloat(), DRAG_SMOOTH_MS,
+            ),
+            slider(Settings.flick).toLong(),
+            DRAG_FLICK_DP_S * density,
+            DragEdge(DRAG_EDGE_DP * density, DRAG_EDGE_RATE_START, slider(Settings.edgeRate).toFloat(), DRAG_EDGE_RAMP_MS),
+            slider(Settings.longPress).toLong(),
+            Ramp(REPEAT_RATE_START, slider(Settings.repeatRate).toFloat(), REPEAT_RAMP_MS),
+            slider(Settings.holdUp).toLong(),
+            PREVIEW_MS,
+            slider(Settings.wordChain).toLong(),
+            wordDrags,
+        )
+    }
 
     /** Take up the user's settings; called whenever the keyboard opens. */
     fun configure(p: Prefs) {
@@ -126,14 +124,7 @@ class KeyboardView(
             requestLayout()
         }
         if (!touches.idle) return
-        touches = buildTouches(
-            p[Settings.swipe].toFloat(),
-            p[Settings.dragStep].toFloat(),
-            p[Settings.dragGain].toFloat(),
-            p[Settings.edgeRate].toFloat(),
-            p[Settings.longPress].toLong(),
-            p[Settings.holdUp].toLong(),
-        )
+        touches = buildTouches({ p[it] }, { p[it] })
         builtFor = null
     }
 

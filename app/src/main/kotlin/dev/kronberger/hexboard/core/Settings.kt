@@ -56,7 +56,13 @@ object Settings {
     val dragStep = Slider("drag_step_dp", "Slow drag, distance per character", 4, 16, DRAG_STEP_DP.toInt(), " dp")
     val dragGain = Slider("drag_gain", "Fast drag acceleration", 1, 16, DRAG_GAIN_MAX.toInt(), "×")
     val edgeRate = Slider("edge_rate", "Edge drag top speed", 30, 400, DRAG_EDGE_RATE_MAX.toInt(), " per second")
+    val flick = Slider("flick_ms", "Longest flick", 50, 300, DRAG_FLICK_MS.toInt(), " ms")
+    val wordDelete = Toggle("word_delete", "Second delete flick takes a word", true)
+    val wordMove = Toggle("word_move", "Second cursor flick moves a word", true)
+    val wordChain = Slider("word_chain_ms", "Time allowed between the two flicks", 150, 800, WORD_CHAIN_MS.toInt(), " ms")
+    val repeatRate = Slider("repeat_rate", "Held delete top speed", 10, 80, REPEAT_RATE_MAX.toInt(), " per second")
 
     val all: List<Setting> = listOf(
-        autoCaps, doubleSpace, haptics, theme, background, keyColor, labelColor, spaceColor, enterColor, size, longPress, holdUp, swipe, dragStep, dragGain, edgeRate)
+        autoCaps, doubleSpace, haptics, theme, background, keyColor, labelColor, spaceColor, enterColor, size, longPress, holdUp,
+        repeatRate, swipe, dragStep, dragGain, edgeRate, flick, wordDelete, wordMove, wordChain)
 }

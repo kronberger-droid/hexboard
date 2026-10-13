@@ -129,7 +129,7 @@ class Ramp(private val startPerS: Float, private val maxPerS: Float, private val
     }
 }
 
-/** A drag starting this soon after a flick of the same kind and way goes by words. */
+/** By default, a drag starting this soon after a flick of the same kind and way goes by words. */
 const val WORD_CHAIN_MS = 400L
 
 /** Words a word drag moves per cluster an ordinary drag would. */
@@ -181,9 +181,10 @@ const val REPEAT_RAMP_MS = 2000f
  * that [Key.repeats] starts tapping it from [tick], at the [repeat] rate,
  * until it lifts or another finger lands.
  *
- * A drag that starts within [WORD_CHAIN_MS] of a flick of the same kind
- * and direction goes by words, at [WORD_STEP] of the usual rate: a second
- * flick moves a word, and flicking then dragging moves word by word.
+ * A drag of one of the [wordDrags] that starts within [chainMs] of a flick
+ * of the same kind and direction goes by words, at [WORD_STEP] of the usual
+ * rate: a second flick moves a word, and flicking then dragging moves word
+ * by word.
  */
 class Touches(
     private val thresholdPx: Float,
@@ -195,6 +196,8 @@ class Touches(
     private val repeat: Ramp,
     private val holdUpMs: Long,
     private val previewMs: Long,
+    private val chainMs: Long = WORD_CHAIN_MS,
+    private val wordDrags: Set<Drag> = setOf(Drag.SCRUB, Drag.MOVE, Drag.SELECT),
 ) {
     /** Horizontal extent of the keyboard the finger can reach, in px. */
     private var left = Float.NEGATIVE_INFINITY
@@ -286,8 +289,8 @@ class Touches(
     /** Whether a drag of [drag] whose first step is [step], starting at [startMs], chains on the last flick. */
     private fun chained(drag: Drag, step: Int, startMs: Long): Boolean {
         // Recall brings back what was deleted cluster by cluster; words would only slow it.
-        val f = lastFlick?.takeIf { drag != Drag.RECALL } ?: return false
-        return f.drag == drag && f.step == step && startMs - f.endMs in 0..WORD_CHAIN_MS
+        val f = lastFlick?.takeIf { drag != Drag.RECALL && drag in wordDrags } ?: return false
+        return f.drag == drag && f.step == step && startMs - f.endMs in 0..chainMs
     }
 
     /** No finger is down. */

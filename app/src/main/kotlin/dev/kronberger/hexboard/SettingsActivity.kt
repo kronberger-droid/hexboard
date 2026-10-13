@@ -38,9 +38,13 @@ import dev.kronberger.hexboard.core.parseColor
 class SettingsActivity : Activity() {
 
     private enum class Page(val title: String, val summary: String, val settings: List<Setting>) {
-        TYPING("Typing", "Capitals, periods, vibration, long press", listOf(Settings.autoCaps, Settings.doubleSpace, Settings.haptics, Settings.longPress, Settings.holdUp)),
+        TYPING("Typing", "Capitals, periods, vibration, long press", listOf(Settings.autoCaps, Settings.doubleSpace, Settings.haptics, Settings.longPress, Settings.holdUp, Settings.repeatRate)),
         APPEARANCE("Appearance", "Keyboard size and custom colors", listOf(Settings.size)),
-        GESTURES("Gestures", "Swipe distance and how drags feel", listOf(Settings.swipe, Settings.dragStep, Settings.dragGain, Settings.edgeRate)),
+        GESTURES(
+            "Gestures",
+            "Swipe distance, how drags feel, flicking by words",
+            listOf(Settings.swipe, Settings.dragStep, Settings.dragGain, Settings.edgeRate, Settings.flick, Settings.wordDelete, Settings.wordMove, Settings.wordChain),
+        ),
     }
 
     private lateinit var prefs: Prefs

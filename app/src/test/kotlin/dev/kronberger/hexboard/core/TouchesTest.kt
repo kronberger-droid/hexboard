@@ -565,6 +565,35 @@ class TouchesTest {
     }
 
     @Test
+    fun onlyTheWordDragsChain() {
+        val t = Touches(50f, gain, 150, 300f, edge, holdMs = 300, repeat = repeat, holdUpMs = 200, previewMs = 120, wordDrags = setOf(Drag.MOVE))
+        t.down(0, a, 500f, 0f, emptyMap(), timeMs = 1000)
+        t.move(0, 445f, 0f, timeMs = 1010)
+        t.up(0, 445f, 0f, timeMs = 1050)
+        t.down(1, b, 500f, 0f, emptyMap(), timeMs = 1200)
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(1, 445f, 0f, timeMs = 1210))
+        t.up(1, 445f, 0f, timeMs = 1250)
+        // Moving still chains.
+        t.down(2, moveSpace, 500f, 0f, emptyMap(), timeMs = 1300)
+        t.up(2, 430f, 0f, timeMs = 1340)
+        t.down(3, moveSpace, 500f, 0f, emptyMap(), timeMs = 1400)
+        assertEquals(listOf(words(Drag.MOVE, -1), end(Drag.MOVE)), t.up(3, 430f, 0f, timeMs = 1440))
+    }
+
+    @Test
+    fun theChainLastsAsLongAsItIsGiven() {
+        val t = Touches(50f, gain, 150, 300f, edge, holdMs = 300, repeat = repeat, holdUpMs = 200, previewMs = 120, chainMs = 100)
+        t.down(0, a, 500f, 0f, emptyMap(), timeMs = 1000)
+        t.move(0, 445f, 0f, timeMs = 1010)
+        t.up(0, 445f, 0f, timeMs = 1050)
+        t.down(1, b, 500f, 0f, emptyMap(), timeMs = 1200)
+        assertEquals(listOf(by(Drag.SCRUB, 1)), t.move(1, 445f, 0f, timeMs = 1210))
+        t.up(1, 445f, 0f, timeMs = 1250)
+        t.down(2, a, 500f, 0f, emptyMap(), timeMs = 1340)
+        assertEquals(listOf(words(Drag.SCRUB, 1)), t.move(2, 445f, 0f, timeMs = 1350))
+    }
+
+    @Test
     fun recallNeverGoesByWords() {
         val t = touches(flickMs = 150)
         t.down(0, a, 500f, 0f, emptyMap(), timeMs = 1000)
