@@ -130,7 +130,7 @@ class Ramp(private val startPerS: Float, private val maxPerS: Float, private val
 }
 
 /** By default, a drag starting this soon after a flick of the same kind and way goes by words. */
-const val WORD_CHAIN_MS = 400L
+const val WORD_CHAIN_MS = 500L
 
 /** Words a word drag moves per cluster an ordinary drag would. */
 const val WORD_STEP = 0.3f
